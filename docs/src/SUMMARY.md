@@ -23,6 +23,7 @@
 - [Custom secure storage](custom-secure-storage.md)
 - [Benchmark Strategy](benchmark-strategy.md)
 - [Guardrail Benchmarks](guardrail-bench.md)
+- [Throughput Benchmarks](throughput-bench.md)
 - [Benchmark](benchmark.md)
 
 # Protocol Integrations

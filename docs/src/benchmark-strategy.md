@@ -69,20 +69,88 @@ Required benchmark IDs:
 
 Purpose: provide machine-specific throughput numbers (TPS) without slowing PR CI.
 
-Required benchmark IDs:
+Required benchmark IDs (mirror the Guardrail Suite under the `throughput.*` suite prefix):
 
-- `throughput.sdk.blackbox.tps.seal_open.1KiB`
-- `throughput.sdk.blackbox.tps.seal_open.16KiB`
+- Store:
+  - `throughput.store.seal_open.direct.1KiB`
+  - `throughput.store.seal_open.direct.16KiB`
+- Crypto:
+  - `throughput.crypto.seal_open.direct.1KiB`
+  - `throughput.crypto.seal_open.direct.16KiB`
+  - Classic HPKE (no `nacl`):
+    - `throughput.crypto.seal_open.hpke.direct.1KiB`
+    - `throughput.crypto.seal_open.hpke.direct.16KiB`
+    - `throughput.crypto.sign_verify.ed25519.direct.1KiB`
+    - `throughput.crypto.sign_verify.ed25519.direct.16KiB`
+  - Post-quantum (feature `pq`, no `nacl`):
+    - `throughput.crypto.seal_open.hpke_pq.direct.1KiB`
+    - `throughput.crypto.seal_open.hpke_pq.direct.16KiB`
+    - `throughput.crypto.sign_verify.mldsa65.direct.1KiB`
+    - `throughput.crypto.sign_verify.mldsa65.direct.16KiB`
+  - Digest:
+    - `throughput.crypto.digest.sha256.32B`
+    - `throughput.crypto.digest.sha256.1KiB`
+    - `throughput.crypto.digest.sha256.16KiB`
+    - `throughput.crypto.digest.blake2b256.32B`
+    - `throughput.crypto.digest.blake2b256.1KiB`
+    - `throughput.crypto.digest.blake2b256.16KiB`
+- CESR:
+  - `throughput.cesr.decode_envelope.1KiB`
+  - `throughput.cesr.decode_envelope.16KiB`
+  - Input MUST be a fixed, pre-generated message fixture (not generated inside the measured region).
+- VID / DID:
+  - `throughput.vid.verify.did_peer.offline`
+  - `throughput.vid.verify.did_web.local`
+  - `throughput.vid.verify.did_webvh.local`
+  - `did:web` and `did:webvh` MUST NOT depend on the public internet (use an in-process fixture resolver or a loopback HTTP server serving repository fixtures).
+
+Additional required benchmark IDs:
+
+- Transport (local loopback; setup vs steady-state separated by benchmark ID):
+  - TCP:
+    - `throughput.transport.tcp.oneway.deliver.1KiB`
+    - `throughput.transport.tcp.oneway.deliver.16KiB`
+    - `throughput.transport.tcp.roundtrip.echo.1KiB`
+    - `throughput.transport.tcp.roundtrip.echo.16KiB`
+  - TLS (local dev cert; no public internet):
+    - `throughput.transport.tls.oneway.deliver.1KiB`
+    - `throughput.transport.tls.oneway.deliver.16KiB`
+    - `throughput.transport.tls.roundtrip.echo.1KiB`
+    - `throughput.transport.tls.roundtrip.echo.16KiB`
+  - QUIC (local dev cert; no public internet):
+    - `throughput.transport.quic.oneway.deliver.1KiB`
+    - `throughput.transport.quic.roundtrip.echo.1KiB`
+    - QUIC message size limits MAY restrict larger payload variants; if so, keep required sizes small and add larger sizes only when supported.
+
+- CLI-level workflows (in-process; MUST NOT benchmark process startup):
+  - Direct send+receive (relationship already established):
+    - `throughput.cli.send_receive.direct.tcp.mem.1KiB`
+    - `throughput.cli.send_receive.direct.tcp.mem.16KiB`
+    - `throughput.cli.send_receive.direct.tcp.sqlite.1KiB`
+    - `throughput.cli.send_receive.direct.tcp.sqlite.16KiB`
+  - Relationship handshake (request -> accept):
+    - `throughput.cli.relationship.roundtrip.tcp.mem`
+    - `throughput.cli.relationship.roundtrip.tcp.sqlite`
+  - Implementation note (stability): CLI `*.tcp.*` benchmarks SHOULD reuse a persistent loopback TCP connection with explicit message framing (e.g. length-delimited) and MUST NOT open a new TCP connection per message. This is a bench harness detail (the SDK's `tcp` transport may use 1-connection-per-message). These IDs are intended to measure steady-state throughput (seal/open + TCP I/O), not connect/accept setup costs.
+
+- Store backends (persistence layer; local-only):
+  - Askar SQLite:
+    - `throughput.store.backend.askar.sqlite.persist.wallet_2vid`
+    - `throughput.store.backend.askar.sqlite.read.wallet_2vid`
 
 Implementation requirements:
 
-- SHOULD be an SDK example binary (release build).
+- SHOULD be implemented using `criterion` benches.
 - MUST use fixed fixtures/keys and fixed payloads.
-- MUST use a fixed iteration count (large enough for stable results).
 - MUST emit canonical JSON (below), including throughput (ops/s) and at least mean wall-clock time.
+- Human-readable summaries SHOULD display median time/throughput (more robust to noise); canonical JSON MAY include additional stats (e.g. median) as extra fields.
 
 Optional (Throughput Suite):
 
+- SDK black-box TPS scenarios (example binary; release build)
+- Askar Postgres (requires local DSN; never required):
+  - `throughput.store.backend.askar.postgres.persist.wallet_2vid`
+  - `throughput.store.backend.askar.postgres.read.wallet_2vid`
 - transport loopback benchmarks (TCP/TLS/QUIC/HTTP), separating setup vs steady-state
 - CLI black-box scenarios (direct/nested/routed using local services only)
 
@@ -161,9 +229,12 @@ Each record MAY include additional metadata fields (e.g., `run.variant`) as long
 
 `environment.tools` MUST include:
 
-- `iai_callgrind` (string; version, from `Cargo.lock`)
-- `iai_callgrind_runner` (string; version)
-- `valgrind` (string; version)
+- for `tool="callgrind"`:
+  - `iai_callgrind` (string; version, from `Cargo.lock`)
+  - `iai_callgrind_runner` (string; version)
+  - `valgrind` (string; version)
+- for `tool="criterion"`:
+  - `criterion` (string; version, from `Cargo.lock`)
 
 Standard metrics:
 
