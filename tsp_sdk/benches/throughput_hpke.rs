@@ -10,13 +10,14 @@ Run it with:\n\
 }
 
 #[cfg(all(not(feature = "nacl"), not(feature = "pq")))]
-use std::time::Duration;
-
-#[cfg(all(not(feature = "nacl"), not(feature = "pq")))]
 use criterion::{Criterion, criterion_group, criterion_main};
 
 #[cfg(all(not(feature = "nacl"), not(feature = "pq")))]
 mod bench_utils;
+
+#[cfg(all(not(feature = "nacl"), not(feature = "pq")))]
+#[path = "common/criterion.rs"]
+mod bench_criterion;
 
 #[cfg(all(not(feature = "nacl"), not(feature = "pq")))]
 use std::hint::black_box;
@@ -130,15 +131,6 @@ fn benches(c: &mut Criterion) {
 }
 
 #[cfg(all(not(feature = "nacl"), not(feature = "pq")))]
-fn criterion_config() -> Criterion {
-    Criterion::default()
-        .without_plots()
-        .warm_up_time(Duration::from_secs(1))
-        .measurement_time(Duration::from_secs(5))
-        .sample_size(30)
-}
-
-#[cfg(all(not(feature = "nacl"), not(feature = "pq")))]
-criterion_group!(name = throughput_hpke; config = criterion_config(); targets = benches);
+criterion_group!(name = throughput_hpke; config = bench_criterion::default_config(); targets = benches);
 #[cfg(all(not(feature = "nacl"), not(feature = "pq")))]
 criterion_main!(throughput_hpke);

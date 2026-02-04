@@ -1,6 +1,7 @@
 use iai_callgrind::{
     LibraryBenchmarkConfig, OutputFormat, library_benchmark, library_benchmark_group, main,
 };
+#[path = "common/bench.rs"]
 mod bench_common;
 mod bench_utils;
 

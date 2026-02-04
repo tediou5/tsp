@@ -1,16 +1,13 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 
 use tsp_sdk::{AskarSecureStorage, OwnedVid, SecureStorage, SecureStore};
 
-fn criterion_config() -> Criterion {
-    Criterion::default()
-        .without_plots()
-        .warm_up_time(Duration::from_secs(1))
-        .measurement_time(Duration::from_secs(5))
-        .sample_size(30)
-}
+#[path = "common/criterion.rs"]
+mod bench_criterion;
+#[path = "common/tokio_rt.rs"]
+mod tokio_rt;
 
 fn wallet_2vid() -> SecureStore {
     let store = SecureStore::new();
@@ -33,10 +30,7 @@ fn benches(c: &mut Criterion) {
     c.bench_function(
         "throughput.store.backend.askar.postgres.persist.wallet_2vid",
         |b| {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("failed to build tokio runtime");
+            let runtime = tokio_rt::current_thread();
 
             b.iter_custom(|iters| {
                 runtime.block_on(async {
@@ -60,10 +54,7 @@ fn benches(c: &mut Criterion) {
     c.bench_function(
         "throughput.store.backend.askar.postgres.read.wallet_2vid",
         |b| {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("failed to build tokio runtime");
+            let runtime = tokio_rt::current_thread();
 
             b.iter_custom(|iters| {
                 runtime.block_on(async {
@@ -86,5 +77,5 @@ fn benches(c: &mut Criterion) {
     );
 }
 
-criterion_group!(name = throughput_store_backend_pg; config = criterion_config(); targets = benches);
+criterion_group!(name = throughput_store_backend_pg; config = bench_criterion::default_config(); targets = benches);
 criterion_main!(throughput_store_backend_pg);

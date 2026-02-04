@@ -1,8 +1,9 @@
-use std::time::Duration;
-
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 
+#[path = "common/bench.rs"]
 mod bench_common;
+#[path = "common/criterion.rs"]
+mod bench_criterion;
 mod bench_utils;
 
 fn benches(c: &mut Criterion) {
@@ -98,13 +99,5 @@ fn benches(c: &mut Criterion) {
     });
 }
 
-fn criterion_config() -> Criterion {
-    Criterion::default()
-        .without_plots()
-        .warm_up_time(Duration::from_secs(1))
-        .measurement_time(Duration::from_secs(5))
-        .sample_size(30)
-}
-
-criterion_group!(name = throughput; config = criterion_config(); targets = benches);
+criterion_group!(name = throughput; config = bench_criterion::default_config(); targets = benches);
 criterion_main!(throughput);
