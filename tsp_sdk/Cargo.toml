@@ -143,7 +143,7 @@ required-features = ["resolve", "bench-criterion"]
 [[bench]]
 name = "throughput_pq"
 harness = false
-required-features = ["pq", "resolve"]
+required-features = ["pq", "resolve", "bench-criterion"]
 
 [[bench]]
 name = "throughput_report"
