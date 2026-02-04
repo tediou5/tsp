@@ -8,10 +8,18 @@ use tsp_sdk::{
     vid::{did::web::DidDocument, resolve::verify_vid_offline},
 };
 
+fn seeded_bytes(seed: u64, len: usize) -> Vec<u8> {
+    use rand::{RngCore as _, SeedableRng as _};
+    let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
+    let mut out = vec![0u8; len];
+    rng.fill_bytes(&mut out);
+    out
+}
+
 pub fn fixture_owned_vid(path: &str) -> tsp_sdk::OwnedVid {
     let json = match path {
-        "alice" => include_str!("../../examples/test/alice/piv.json"),
-        "bob" => include_str!("../../examples/test/bob/piv.json"),
+        "alice" => include_str!("../../../examples/test/alice/piv.json"),
+        "bob" => include_str!("../../../examples/test/bob/piv.json"),
         _ => panic!("unknown fixture"),
     };
     serde_json::from_str(json).expect("fixture must deserialize as OwnedVid")
@@ -36,10 +44,7 @@ pub fn setup_store(_benchmark_id: &'static str, payload_len: usize) -> StoreCase
         store,
         sender: alice.identifier().to_string(),
         receiver: bob.identifier().to_string(),
-        payload: crate::bench_utils::seeded_bytes(
-            0x53544F52455F504Cu64 ^ payload_len as u64,
-            payload_len,
-        ),
+        payload: seeded_bytes(0x53544F52455F504Cu64 ^ payload_len as u64, payload_len),
     }
 }
 
@@ -66,10 +71,7 @@ pub fn setup_crypto(_benchmark_id: &'static str, payload_len: usize) -> CryptoCa
     CryptoCase {
         alice: fixture_owned_vid("alice"),
         bob: fixture_owned_vid("bob"),
-        payload: crate::bench_utils::seeded_bytes(
-            0x43525950544F5F50u64 ^ payload_len as u64,
-            payload_len,
-        ),
+        payload: seeded_bytes(0x43525950544F5F50u64 ^ payload_len as u64, payload_len),
     }
 }
 
@@ -93,7 +95,7 @@ pub fn crypto_seal_open(case: &CryptoCase) -> usize {
 }
 
 pub fn setup_digest_input(_benchmark_id: &'static str, payload_len: usize) -> Vec<u8> {
-    crate::bench_utils::seeded_bytes(0x4449474553545F50u64 ^ payload_len as u64, payload_len)
+    seeded_bytes(0x4449474553545F50u64 ^ payload_len as u64, payload_len)
 }
 
 pub fn crypto_sha256(input: &[u8]) -> u8 {
@@ -109,8 +111,7 @@ pub fn crypto_blake2b256(input: &[u8]) -> u8 {
 pub fn setup_cesr_fixture(_benchmark_id: &'static str, payload_len: usize) -> Vec<u8> {
     let alice = fixture_owned_vid("alice");
     let bob = fixture_owned_vid("bob");
-    let payload =
-        crate::bench_utils::seeded_bytes(0x434553525F504C44u64 ^ payload_len as u64, payload_len);
+    let payload = seeded_bytes(0x434553525F504C44u64 ^ payload_len as u64, payload_len);
 
     tsp_sdk::crypto::seal(&alice, &bob, None, Payload::Content(payload.as_slice())).unwrap()
 }

@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use bytes::Bytes;
 use criterion::{Criterion, criterion_group, criterion_main};
@@ -12,7 +12,13 @@ use tsp_sdk::{
     AskarSecureStorage, AsyncSecureStore, OwnedVid, RelationshipStatus, SecureStorage, VerifiedVid,
 };
 
+#[path = "common/criterion.rs"]
+mod bench_criterion;
 mod bench_utils;
+#[path = "common/sqlite.rs"]
+mod sqlite;
+#[path = "common/tokio_rt.rs"]
+mod tokio_rt;
 
 fn tcp_url(host: &str, port: u16) -> Url {
     Url::parse(&format!("tcp://{host}:{port}")).expect("failed to parse tcp url")
@@ -52,14 +58,6 @@ fn relationship_bi_default() -> RelationshipStatus {
     }
 }
 
-fn criterion_config() -> Criterion {
-    Criterion::default()
-        .without_plots()
-        .warm_up_time(Duration::from_secs(1))
-        .measurement_time(Duration::from_secs(5))
-        .sample_size(30)
-}
-
 fn bench_send_receive_direct(c: &mut Criterion, backend: &'static str, payload_len: usize) {
     let id = format!(
         "throughput.cli.send_receive.direct.tcp.{backend}.{}",
@@ -67,10 +65,7 @@ fn bench_send_receive_direct(c: &mut Criterion, backend: &'static str, payload_l
     );
 
     c.bench_function(&id, |b| {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("failed to build tokio runtime");
+        let runtime = tokio_rt::current_thread();
 
         b.iter_custom(|iters| {
             runtime.block_on(async {
@@ -118,8 +113,8 @@ fn bench_send_receive_direct(c: &mut Criterion, backend: &'static str, payload_l
                 );
 
                 let (vault_alice, vault_bob) = if backend == "sqlite" {
-                    let alice_db = sqlite_url("tsp-cli-alice");
-                    let bob_db = sqlite_url("tsp-cli-bob");
+                    let alice_db = sqlite::temp_url("tsp-cli-alice");
+                    let bob_db = sqlite::temp_url("tsp-cli-bob");
                     let vault_alice = AskarSecureStorage::new(&alice_db, b"password")
                         .await
                         .unwrap();
@@ -211,10 +206,7 @@ fn bench_send_receive_direct(c: &mut Criterion, backend: &'static str, payload_l
 fn bench_relationship_roundtrip(c: &mut Criterion, backend: &'static str) {
     let id = format!("throughput.cli.relationship.roundtrip.tcp.{backend}");
     c.bench_function(&id, |b| {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("failed to build tokio runtime");
+        let runtime = tokio_rt::current_thread();
 
         b.iter_custom(|iters| {
             runtime.block_on(async {
@@ -244,8 +236,8 @@ fn bench_relationship_roundtrip(c: &mut Criterion, backend: &'static str) {
                 .unwrap();
 
                 let (vault_alice, vault_bob) = if backend == "sqlite" {
-                    let alice_db = sqlite_url("tsp-cli-alice-rel");
-                    let bob_db = sqlite_url("tsp-cli-bob-rel");
+                    let alice_db = sqlite::temp_url("tsp-cli-alice-rel");
+                    let bob_db = sqlite::temp_url("tsp-cli-bob-rel");
                     let vault_alice = AskarSecureStorage::new(&alice_db, b"password")
                         .await
                         .unwrap();
@@ -374,12 +366,6 @@ fn bench_relationship_roundtrip(c: &mut Criterion, backend: &'static str) {
     });
 }
 
-fn sqlite_url(name: &str) -> String {
-    let suffix = format!("{}.{}.sqlite", name, std::process::id());
-    let path = std::env::temp_dir().join(suffix);
-    format!("sqlite://{}", path.display())
-}
-
 fn size_label(payload_len: usize) -> &'static str {
     match payload_len {
         1024 => "1KiB",
@@ -398,5 +384,5 @@ fn benches(c: &mut Criterion) {
     bench_relationship_roundtrip(c, "sqlite");
 }
 
-criterion_group!(name = throughput_cli; config = criterion_config(); targets = benches);
+criterion_group!(name = throughput_cli; config = bench_criterion::default_config(); targets = benches);
 criterion_main!(throughput_cli);

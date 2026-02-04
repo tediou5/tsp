@@ -1,6 +1,6 @@
 use std::{
     net::{Ipv4Addr, SocketAddr},
-    sync::Arc,
+    sync::{Arc, OnceLock},
     time::{Duration, Instant},
 };
 
@@ -11,15 +11,22 @@ use rustls_pki_types::pem::PemObject;
 use url::Url;
 
 mod bench_utils;
+#[path = "common/tokio_rt.rs"]
+mod tokio_rt;
 
-async fn tls_oneway_deliver(payload: &[u8], iters: u64) -> Duration {
-    use tokio::{
-        io::{AsyncReadExt as _, AsyncWriteExt as _},
-        net::{TcpListener, TcpStream},
-    };
-    use tokio_rustls::{TlsAcceptor, TlsConnector};
+fn ensure_crypto_provider() {
+    static INSTALLED: OnceLock<()> = OnceLock::new();
+    INSTALLED.get_or_init(|| {
+        let _ = CryptoProvider::install_default(rustls::crypto::aws_lc_rs::default_provider());
+    });
+}
 
-    let _ = CryptoProvider::install_default(rustls::crypto::aws_lc_rs::default_provider());
+fn load_local_test_tls_material() -> (
+    Vec<rustls_pki_types::CertificateDer<'static>>,
+    rustls_pki_types::PrivateKeyDer<'static>,
+    rustls::RootCertStore,
+) {
+    ensure_crypto_provider();
 
     let cert_path = "../examples/test/localhost.pem";
     let key_path = "../examples/test/localhost-key.pem";
@@ -33,16 +40,6 @@ async fn tls_oneway_deliver(payload: &[u8], iters: u64) -> Duration {
     let key = rustls_pki_types::PrivateKeyDer::from_pem_file(key_path)
         .expect("could not read local test private key");
 
-    let server_config = rustls::ServerConfig::builder_with_provider(Arc::new(
-        rustls::crypto::aws_lc_rs::default_provider(),
-    ))
-    .with_safe_default_protocol_versions()
-    .unwrap()
-    .with_no_client_auth()
-    .with_single_cert(certs, key)
-    .expect("invalid server cert/key");
-    let acceptor = TlsAcceptor::from(Arc::new(server_config));
-
     let mut root = rustls::RootCertStore::empty();
     let ca_certs: Vec<rustls_pki_types::CertificateDer<'static>> =
         rustls_pki_types::CertificateDer::pem_file_iter(ca_path)
@@ -53,6 +50,24 @@ async fn tls_oneway_deliver(payload: &[u8], iters: u64) -> Duration {
         root.add(cert).expect("could not add local root CA");
     }
 
+    (certs, key, root)
+}
+
+fn tls_acceptor_connector() -> (tokio_rustls::TlsAcceptor, tokio_rustls::TlsConnector) {
+    use tokio_rustls::{TlsAcceptor, TlsConnector};
+
+    let (certs, key, root) = load_local_test_tls_material();
+
+    let server_config = rustls::ServerConfig::builder_with_provider(Arc::new(
+        rustls::crypto::aws_lc_rs::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .unwrap()
+    .with_no_client_auth()
+    .with_single_cert(certs, key)
+    .expect("invalid server cert/key");
+    let acceptor = TlsAcceptor::from(Arc::new(server_config));
+
     let client_config = rustls::ClientConfig::builder_with_provider(Arc::new(
         rustls::crypto::aws_lc_rs::default_provider(),
     ))
@@ -61,6 +76,51 @@ async fn tls_oneway_deliver(payload: &[u8], iters: u64) -> Duration {
     .with_root_certificates(root)
     .with_no_client_auth();
     let connector = TlsConnector::from(Arc::new(client_config));
+
+    (acceptor, connector)
+}
+
+fn quic_server_client_configs() -> (quinn::ServerConfig, quinn::ClientConfig) {
+    let (certs, key, root) = load_local_test_tls_material();
+
+    let mut server_tls = rustls::ServerConfig::builder_with_provider(Arc::new(
+        rustls::crypto::aws_lc_rs::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .unwrap()
+    .with_no_client_auth()
+    .with_single_cert(certs, key)
+    .expect("invalid server cert/key");
+    server_tls.alpn_protocols = vec![b"hq-29".to_vec()];
+
+    let server_config = quinn::ServerConfig::with_crypto(Arc::new(
+        quinn::crypto::rustls::QuicServerConfig::try_from(server_tls)
+            .expect("could not convert rustls to quic server config"),
+    ));
+
+    let mut client_tls = rustls::ClientConfig::builder_with_provider(Arc::new(
+        rustls::crypto::aws_lc_rs::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .unwrap()
+    .with_root_certificates(root)
+    .with_no_client_auth();
+    client_tls.alpn_protocols = vec![b"hq-29".to_vec()];
+
+    let client_config = quinn::ClientConfig::new(Arc::new(
+        quinn::crypto::rustls::QuicClientConfig::try_from(Arc::new(client_tls))
+            .expect("could not convert rustls to quic client config"),
+    ));
+
+    (server_config, client_config)
+}
+
+async fn tls_oneway_deliver(payload: &[u8], iters: u64) -> Duration {
+    use tokio::{
+        io::{AsyncReadExt as _, AsyncWriteExt as _},
+        net::{TcpListener, TcpStream},
+    };
+    let (acceptor, connector) = tls_acceptor_connector();
 
     let listener = TcpListener::bind(("127.0.0.1", 0))
         .await
@@ -115,50 +175,7 @@ async fn tls_roundtrip_echo(payload: &[u8], iters: u64) -> Duration {
         io::{AsyncReadExt as _, AsyncWriteExt as _},
         net::{TcpListener, TcpStream},
     };
-    use tokio_rustls::{TlsAcceptor, TlsConnector};
-
-    let _ = CryptoProvider::install_default(rustls::crypto::aws_lc_rs::default_provider());
-
-    let cert_path = "../examples/test/localhost.pem";
-    let key_path = "../examples/test/localhost-key.pem";
-    let ca_path = "../examples/test/root-ca.pem";
-
-    let certs: Vec<rustls_pki_types::CertificateDer<'static>> =
-        rustls_pki_types::CertificateDer::pem_file_iter(cert_path)
-            .expect("could not find local test certificate")
-            .collect::<Result<Vec<_>, _>>()
-            .expect("could not read local test certificate");
-    let key = rustls_pki_types::PrivateKeyDer::from_pem_file(key_path)
-        .expect("could not read local test private key");
-
-    let server_config = rustls::ServerConfig::builder_with_provider(Arc::new(
-        rustls::crypto::aws_lc_rs::default_provider(),
-    ))
-    .with_safe_default_protocol_versions()
-    .unwrap()
-    .with_no_client_auth()
-    .with_single_cert(certs, key)
-    .expect("invalid server cert/key");
-    let acceptor = TlsAcceptor::from(Arc::new(server_config));
-
-    let mut root = rustls::RootCertStore::empty();
-    let ca_certs: Vec<rustls_pki_types::CertificateDer<'static>> =
-        rustls_pki_types::CertificateDer::pem_file_iter(ca_path)
-            .expect("could not find local root CA")
-            .collect::<Result<Vec<_>, _>>()
-            .expect("could not read local root CA");
-    for cert in ca_certs {
-        root.add(cert).expect("could not add local root CA");
-    }
-
-    let client_config = rustls::ClientConfig::builder_with_provider(Arc::new(
-        rustls::crypto::aws_lc_rs::default_provider(),
-    ))
-    .with_safe_default_protocol_versions()
-    .unwrap()
-    .with_root_certificates(root)
-    .with_no_client_auth();
-    let connector = TlsConnector::from(Arc::new(client_config));
+    let (acceptor, connector) = tls_acceptor_connector();
 
     let listener = TcpListener::bind(("127.0.0.1", 0))
         .await
@@ -218,34 +235,7 @@ async fn tls_roundtrip_echo(payload: &[u8], iters: u64) -> Duration {
 }
 
 async fn quic_oneway_deliver(payload: &[u8], iters: u64) -> Duration {
-    let _ = CryptoProvider::install_default(rustls::crypto::aws_lc_rs::default_provider());
-
-    let cert_path = "../examples/test/localhost.pem";
-    let key_path = "../examples/test/localhost-key.pem";
-    let ca_path = "../examples/test/root-ca.pem";
-
-    let certs: Vec<rustls_pki_types::CertificateDer<'static>> =
-        rustls_pki_types::CertificateDer::pem_file_iter(cert_path)
-            .expect("could not find local test certificate")
-            .collect::<Result<Vec<_>, _>>()
-            .expect("could not read local test certificate");
-    let key = rustls_pki_types::PrivateKeyDer::from_pem_file(key_path)
-        .expect("could not read local test private key");
-
-    let mut server_tls = rustls::ServerConfig::builder_with_provider(Arc::new(
-        rustls::crypto::aws_lc_rs::default_provider(),
-    ))
-    .with_safe_default_protocol_versions()
-    .unwrap()
-    .with_no_client_auth()
-    .with_single_cert(certs, key)
-    .expect("invalid server cert/key");
-    server_tls.alpn_protocols = vec![b"hq-29".to_vec()];
-
-    let server_config = quinn::ServerConfig::with_crypto(Arc::new(
-        quinn::crypto::rustls::QuicServerConfig::try_from(server_tls)
-            .expect("could not convert rustls to quic server config"),
-    ));
+    let (server_config, client_config) = quic_server_client_configs();
 
     let listen_address: SocketAddr = (Ipv4Addr::LOCALHOST, 0).into();
     let server_endpoint =
@@ -253,30 +243,6 @@ async fn quic_oneway_deliver(payload: &[u8], iters: u64) -> Duration {
     let server_addr = server_endpoint
         .local_addr()
         .expect("quic server local_addr failed");
-
-    let mut root = rustls::RootCertStore::empty();
-    let ca_certs: Vec<rustls_pki_types::CertificateDer<'static>> =
-        rustls_pki_types::CertificateDer::pem_file_iter(ca_path)
-            .expect("could not find local root CA")
-            .collect::<Result<Vec<_>, _>>()
-            .expect("could not read local root CA");
-    for cert in ca_certs {
-        root.add(cert).expect("could not add local root CA");
-    }
-
-    let mut client_tls = rustls::ClientConfig::builder_with_provider(Arc::new(
-        rustls::crypto::aws_lc_rs::default_provider(),
-    ))
-    .with_safe_default_protocol_versions()
-    .unwrap()
-    .with_root_certificates(root)
-    .with_no_client_auth();
-    client_tls.alpn_protocols = vec![b"hq-29".to_vec()];
-
-    let client_config = quinn::ClientConfig::new(Arc::new(
-        quinn::crypto::rustls::QuicClientConfig::try_from(Arc::new(client_tls))
-            .expect("could not convert rustls to quic client config"),
-    ));
 
     let listen_address: SocketAddr = (Ipv4Addr::LOCALHOST, 0).into();
     let mut client_endpoint =
@@ -328,34 +294,7 @@ async fn quic_oneway_deliver(payload: &[u8], iters: u64) -> Duration {
 }
 
 async fn quic_roundtrip_echo(payload: &[u8], iters: u64) -> Duration {
-    let _ = CryptoProvider::install_default(rustls::crypto::aws_lc_rs::default_provider());
-
-    let cert_path = "../examples/test/localhost.pem";
-    let key_path = "../examples/test/localhost-key.pem";
-    let ca_path = "../examples/test/root-ca.pem";
-
-    let certs: Vec<rustls_pki_types::CertificateDer<'static>> =
-        rustls_pki_types::CertificateDer::pem_file_iter(cert_path)
-            .expect("could not find local test certificate")
-            .collect::<Result<Vec<_>, _>>()
-            .expect("could not read local test certificate");
-    let key = rustls_pki_types::PrivateKeyDer::from_pem_file(key_path)
-        .expect("could not read local test private key");
-
-    let mut server_tls = rustls::ServerConfig::builder_with_provider(Arc::new(
-        rustls::crypto::aws_lc_rs::default_provider(),
-    ))
-    .with_safe_default_protocol_versions()
-    .unwrap()
-    .with_no_client_auth()
-    .with_single_cert(certs, key)
-    .expect("invalid server cert/key");
-    server_tls.alpn_protocols = vec![b"hq-29".to_vec()];
-
-    let server_config = quinn::ServerConfig::with_crypto(Arc::new(
-        quinn::crypto::rustls::QuicServerConfig::try_from(server_tls)
-            .expect("could not convert rustls to quic server config"),
-    ));
+    let (server_config, client_config) = quic_server_client_configs();
 
     let listen_address: SocketAddr = (Ipv4Addr::LOCALHOST, 0).into();
     let server_endpoint =
@@ -363,30 +302,6 @@ async fn quic_roundtrip_echo(payload: &[u8], iters: u64) -> Duration {
     let server_addr = server_endpoint
         .local_addr()
         .expect("quic server local_addr failed");
-
-    let mut root = rustls::RootCertStore::empty();
-    let ca_certs: Vec<rustls_pki_types::CertificateDer<'static>> =
-        rustls_pki_types::CertificateDer::pem_file_iter(ca_path)
-            .expect("could not find local root CA")
-            .collect::<Result<Vec<_>, _>>()
-            .expect("could not read local root CA");
-    for cert in ca_certs {
-        root.add(cert).expect("could not add local root CA");
-    }
-
-    let mut client_tls = rustls::ClientConfig::builder_with_provider(Arc::new(
-        rustls::crypto::aws_lc_rs::default_provider(),
-    ))
-    .with_safe_default_protocol_versions()
-    .unwrap()
-    .with_root_certificates(root)
-    .with_no_client_auth();
-    client_tls.alpn_protocols = vec![b"hq-29".to_vec()];
-
-    let client_config = quinn::ClientConfig::new(Arc::new(
-        quinn::crypto::rustls::QuicClientConfig::try_from(Arc::new(client_tls))
-            .expect("could not convert rustls to quic client config"),
-    ));
 
     let listen_address: SocketAddr = (Ipv4Addr::LOCALHOST, 0).into();
     let mut client_endpoint =
@@ -566,10 +481,7 @@ fn bench_oneway(c: &mut Criterion, scheme: &'static str, host: &'static str, pay
         size_label(payload_len)
     );
     c.bench_function(&benchmark_id, |b| {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("failed to build tokio runtime");
+        let runtime = tokio_rt::current_thread();
 
         b.iter_custom(|iters| {
             runtime.block_on(async {
@@ -641,10 +553,7 @@ fn bench_roundtrip(
         size_label(payload_len)
     );
     c.bench_function(&benchmark_id, |b| {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("failed to build tokio runtime");
+        let runtime = tokio_rt::current_thread();
 
         b.iter_custom(|iters| {
             runtime.block_on(async {

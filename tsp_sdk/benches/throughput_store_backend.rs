@@ -1,22 +1,15 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 
 use tsp_sdk::{AskarSecureStorage, OwnedVid, SecureStorage, SecureStore};
 
-fn criterion_config() -> Criterion {
-    Criterion::default()
-        .without_plots()
-        .warm_up_time(Duration::from_secs(1))
-        .measurement_time(Duration::from_secs(5))
-        .sample_size(30)
-}
-
-fn sqlite_url(name: &str) -> String {
-    let suffix = format!("{}.{}.sqlite", name, std::process::id());
-    let path = std::env::temp_dir().join(suffix);
-    format!("sqlite://{}", path.display())
-}
+#[path = "common/criterion.rs"]
+mod bench_criterion;
+#[path = "common/sqlite.rs"]
+mod sqlite;
+#[path = "common/tokio_rt.rs"]
+mod tokio_rt;
 
 fn wallet_2vid() -> SecureStore {
     let store = SecureStore::new();
@@ -35,14 +28,11 @@ fn benches(c: &mut Criterion) {
     c.bench_function(
         "throughput.store.backend.askar.sqlite.persist.wallet_2vid",
         |b| {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("failed to build tokio runtime");
+            let runtime = tokio_rt::current_thread();
 
             b.iter_custom(|iters| {
                 runtime.block_on(async {
-                    let url = sqlite_url("tsp-store-backend-persist");
+                    let url = sqlite::temp_url("tsp-store-backend-persist");
                     let vault = AskarSecureStorage::new(&url, b"password").await.unwrap();
 
                     let store = wallet_2vid();
@@ -64,14 +54,11 @@ fn benches(c: &mut Criterion) {
     c.bench_function(
         "throughput.store.backend.askar.sqlite.read.wallet_2vid",
         |b| {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("failed to build tokio runtime");
+            let runtime = tokio_rt::current_thread();
 
             b.iter_custom(|iters| {
                 runtime.block_on(async {
-                    let url = sqlite_url("tsp-store-backend-read");
+                    let url = sqlite::temp_url("tsp-store-backend-read");
                     let vault = AskarSecureStorage::new(&url, b"password").await.unwrap();
 
                     let store = wallet_2vid();
@@ -92,5 +79,5 @@ fn benches(c: &mut Criterion) {
     );
 }
 
-criterion_group!(name = throughput_store_backend; config = criterion_config(); targets = benches);
+criterion_group!(name = throughput_store_backend; config = bench_criterion::default_config(); targets = benches);
 criterion_main!(throughput_store_backend);
