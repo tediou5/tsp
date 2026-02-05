@@ -10,7 +10,7 @@ Run it with:\n\
 }
 
 #[cfg(all(not(feature = "nacl"), not(feature = "pq")))]
-use iai_callgrind::{
+use gungraun::{
     LibraryBenchmarkConfig, OutputFormat, library_benchmark, library_benchmark_group, main,
 };
 #[cfg(all(not(feature = "nacl"), not(feature = "pq")))]

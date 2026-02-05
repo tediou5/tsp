@@ -1,0 +1,148 @@
+name: Guardrail Bench (Bencher)
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  guardrail:
+    runs-on: ubuntu-latest
+    # Secrets are not available to forked PRs; skip Bencher upload there.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      RUST_BACKTRACE: "1"
+      # Configure these in your repo/org settings:
+      # - `BENCHER_PROJECT`: Bencher project slug
+      # - `BENCHER_API_TOKEN`: Bencher API token (secret)
+      BENCHER_PROJECT: ${{ vars.BENCHER_PROJECT }}
+      BENCHER_API_TOKEN: ${{ secrets.BENCHER_API_TOKEN }}
+      BENCHER_HOST: ${{ vars.BENCHER_HOST }}
+      BENCHER_TESTBED: ubuntu-latest
+      BENCHER_BRANCH: ${{ github.head_ref || github.ref_name }}
+      BENCHER_HASH: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install Callgrind prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends valgrind
+
+      - name: Install gungraun-runner (matching Cargo.lock)
+        run: |
+          GUNGRAUN_VERSION="$(
+            awk '
+              $0=="[[package]]"{inpkg=1; name=""; next}
+              inpkg && $1=="name" && $3=="\"gungraun\""{name="gungraun"; next}
+              inpkg && name=="gungraun" && $1=="version"{gsub(/"/,"",$3); print $3; exit}
+            ' Cargo.lock
+          )"
+          if [[ -z "${GUNGRAUN_VERSION}" ]]; then
+            echo "failed to detect gungraun version from Cargo.lock" >&2
+            exit 1
+          fi
+          cargo install --locked gungraun-runner --version "${GUNGRAUN_VERSION}"
+
+      - name: Install Bencher CLI
+        uses: bencherdev/bencher@main
+
+      - name: Guardrail (default)
+        run: |
+          EXTRA_FLAGS=()
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            EXTRA_FLAGS+=(--start-point "${GITHUB_BASE_REF}")
+            EXTRA_FLAGS+=(--start-point-hash "${{ github.event.pull_request.base.sha }}")
+            EXTRA_FLAGS+=(--start-point-clone-thresholds --start-point-reset)
+          fi
+
+          HOST_FLAGS=()
+          if [[ -n "${BENCHER_HOST}" ]]; then
+            HOST_FLAGS+=(--host "${BENCHER_HOST}")
+          fi
+
+          bencher run \
+            --project "${BENCHER_PROJECT}" \
+            --token "${BENCHER_API_TOKEN}" \
+            --testbed "${BENCHER_TESTBED}" \
+            --branch "${BENCHER_BRANCH}" \
+            --hash "${BENCHER_HASH}" \
+            --adapter rust_gungraun \
+            --ci-id guardrail-default \
+            --github-actions "${GITHUB_TOKEN}" \
+            "${HOST_FLAGS[@]}" \
+            "${EXTRA_FLAGS[@]}" \
+            -- \
+            cargo bench -p tsp_sdk --bench guardrail --features "resolve,bench-callgrind"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Guardrail (hpke)
+        run: |
+          EXTRA_FLAGS=()
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            EXTRA_FLAGS+=(--start-point "${GITHUB_BASE_REF}")
+            EXTRA_FLAGS+=(--start-point-hash "${{ github.event.pull_request.base.sha }}")
+            EXTRA_FLAGS+=(--start-point-clone-thresholds --start-point-reset)
+          fi
+
+          HOST_FLAGS=()
+          if [[ -n "${BENCHER_HOST}" ]]; then
+            HOST_FLAGS+=(--host "${BENCHER_HOST}")
+          fi
+
+          bencher run \
+            --project "${BENCHER_PROJECT}" \
+            --token "${BENCHER_API_TOKEN}" \
+            --testbed "${BENCHER_TESTBED}" \
+            --branch "${BENCHER_BRANCH}" \
+            --hash "${BENCHER_HASH}" \
+            --adapter rust_gungraun \
+            --ci-id guardrail-hpke \
+            --github-actions "${GITHUB_TOKEN}" \
+            "${HOST_FLAGS[@]}" \
+            "${EXTRA_FLAGS[@]}" \
+            -- \
+            cargo bench -p tsp_sdk --bench guardrail_hpke --no-default-features --features "resolve,bench-callgrind"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Guardrail (pq)
+        run: |
+          EXTRA_FLAGS=()
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            EXTRA_FLAGS+=(--start-point "${GITHUB_BASE_REF}")
+            EXTRA_FLAGS+=(--start-point-hash "${{ github.event.pull_request.base.sha }}")
+            EXTRA_FLAGS+=(--start-point-clone-thresholds --start-point-reset)
+          fi
+
+          HOST_FLAGS=()
+          if [[ -n "${BENCHER_HOST}" ]]; then
+            HOST_FLAGS+=(--host "${BENCHER_HOST}")
+          fi
+
+          bencher run \
+            --project "${BENCHER_PROJECT}" \
+            --token "${BENCHER_API_TOKEN}" \
+            --testbed "${BENCHER_TESTBED}" \
+            --branch "${BENCHER_BRANCH}" \
+            --hash "${BENCHER_HASH}" \
+            --adapter rust_gungraun \
+            --ci-id guardrail-pq \
+            --github-actions "${GITHUB_TOKEN}" \
+            "${HOST_FLAGS[@]}" \
+            "${EXTRA_FLAGS[@]}" \
+            -- \
+            cargo bench -p tsp_sdk --bench guardrail_pq --no-default-features --features "pq,resolve,bench-callgrind"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

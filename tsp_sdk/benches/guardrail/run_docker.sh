@@ -11,22 +11,22 @@ if [[ ! -f "${LOCKFILE}" ]]; then
   exit 1
 fi
 
-IAI_CALLGRIND_VERSION="$(
+GUNGRAUN_VERSION="$(
   awk '
     $0=="[[package]]"{inpkg=1; name=""; ver=""; next}
-    inpkg && $1=="name" && $3=="\"iai-callgrind\""{name="iai-callgrind"; next}
-    inpkg && name=="iai-callgrind" && $1=="version"{gsub(/"/,"",$3); print $3; exit}
+    inpkg && $1=="name" && $3=="\"gungraun\""{name="gungraun"; next}
+    inpkg && name=="gungraun" && $1=="version"{gsub(/"/,"",$3); print $3; exit}
   ' "${LOCKFILE}"
 )"
 
-if [[ -z "${IAI_CALLGRIND_VERSION}" ]]; then
-  echo "failed to detect iai-callgrind version from Cargo.lock" >&2
+if [[ -z "${GUNGRAUN_VERSION}" ]]; then
+  echo "failed to detect gungraun version from Cargo.lock" >&2
   exit 1
 fi
 
 docker build \
   -f "${DOCKERFILE}" \
-  --build-arg "IAI_CALLGRIND_RUNNER_VERSION=${IAI_CALLGRIND_VERSION}" \
+  --build-arg "GUNGRAUN_RUNNER_VERSION=${GUNGRAUN_VERSION}" \
   -t "${IMAGE}" \
   "${ROOT_DIR}"
 
