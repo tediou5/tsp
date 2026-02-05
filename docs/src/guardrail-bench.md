@@ -1,24 +1,32 @@
 # Guardrail Benchmarks
 
-The Guardrail Suite is the CI-oriented benchmark suite for `tsp_sdk`. It is designed for regression detection with stable metrics.
+The Guardrail Suite is the CI-oriented benchmark suite for `tsp_sdk`. It is designed for regression detection with stable metrics and is reported via Bencher.
 
 ## What it measures
 
 - Metric: Callgrind `Ir` (instruction count)
 - Coverage: the Guardrail benchmark IDs defined in `benchmark-strategy.md`
-- Variants: the report runner may execute multiple bench targets with different feature sets (e.g., default, classic HPKE, PQ)
+- Variants: multiple bench targets with different feature sets (e.g., default, classic HPKE, PQ)
 
 ## How to run
 
-Linux (recommended):
+CI (recommended):
+
+Guardrail runs are uploaded and compared in Bencher. See `.github/workflows/bench-guardrail.yml` for the exact commands and required secrets/vars.
+
+Linux (manual, no Bencher):
 
 ```bash
-cargo bench -p tsp_sdk --bench guardrail_report
+cargo bench -p tsp_sdk --bench guardrail --features resolve,bench-callgrind
+cargo bench -p tsp_sdk --bench guardrail_hpke --no-default-features --features resolve,bench-callgrind
+cargo bench -p tsp_sdk --bench guardrail_pq --no-default-features --features pq,resolve,bench-callgrind
 ```
 
 macOS:
 
-Callgrind/Valgrind is frequently unsupported or unstable on macOS. Use Docker:
+Callgrind/Valgrind is frequently unsupported or unstable on macOS. Prefer relying on CI.
+
+If needed, use Docker to run the suite:
 
 ```bash
 bash tsp_sdk/benches/guardrail/run_docker.sh
@@ -26,15 +34,12 @@ bash tsp_sdk/benches/guardrail/run_docker.sh
 
 ## Outputs
 
-The Guardrail report runner writes:
+Primary results are stored in Bencher.
 
-- Canonical JSONL (one record per benchmark): `target/bench-results/guardrail.jsonl`
-- Raw iai-callgrind summaries (for debugging/AI): `target/bench-results/guardrail.<variant>.iai.json`
-
-Callgrind artifacts are produced under `target/iai/**` and referenced by relative paths in each JSONL record under `artifacts.*`.
+Local runs produce gungraun output, and Callgrind artifacts are produced under `target/gungraun/**`.
 
 ## How to read results
 
 - `benchmark_id` identifies the benchmark case (stable across refactors).
 - `value` is the `Ir` instruction count (lower is better).
-- `run.variant` indicates which Guardrail sub-run produced the record (e.g., `default`, `hpke`, `pq`).
+- Variant-specific benchmarks include the crypto suite in their benchmark IDs (e.g., `*.hpke.*`, `*.hpke_pq.*`).

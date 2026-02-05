@@ -28,7 +28,9 @@ Purpose: regression detection with minimal CI time.
 
 Metric: MUST gate on Callgrind `Ir` (instructions), not wall-clock time.
 
-Implementation note: Guardrail coverage MAY require multiple `cargo bench` invocations under different feature sets (e.g., default, no-`nacl`, `pq`). CI should merge results into a single canonical JSON output.
+Implementation note: Guardrail coverage MAY require multiple `cargo bench` invocations under different feature sets (e.g., default, no-`nacl`, `pq`).
+
+Implementation note: Guardrail is reported via Bencher in CI. Running under different feature sets MAY require multiple `bencher run` invocations.
 
 Required benchmark IDs:
 
@@ -168,8 +170,10 @@ Implementation requirements:
 
 - SHOULD be implemented using `criterion` benches.
 - MUST use fixed fixtures/keys and fixed payloads.
-- MUST emit canonical JSON (below), including throughput (ops/s) and at least mean wall-clock time.
-- Human-readable summaries SHOULD display median time/throughput (more robust to noise); canonical JSON MAY include additional stats (e.g. median) as extra fields.
+- MUST report results in a stable, machine-readable way.
+  - Throughput Suite: uses the repository-local report runner to emit canonical JSON (below), including throughput (ops/s) and at least mean wall-clock time.
+  - Guardrail Suite: results are uploaded and compared in Bencher (CI), with optional Callgrind artifacts retained for debugging.
+- Human-readable summaries SHOULD display median time/throughput (more robust to noise) when available.
 
 Optional (Throughput Suite):
 
@@ -219,9 +223,9 @@ Where:
 - `variant`: e.g., `direct`, `setup`, `steady`, `offline`, `local`
 - `size`: e.g., `0B`, `32B`, `256B`, `1KiB`, `16KiB`
 
-## Canonical JSON output (v1)
+## Canonical JSON output (v1, local / optional)
 
-All benchmark implementations MUST be able to emit canonical JSON:
+Repository-local report runners MAY emit canonical JSON:
 
 - UTF-8
 - either a JSON array (`.json`) or JSON Lines (`.jsonl`)
@@ -255,11 +259,11 @@ Each record MAY include additional metadata fields (e.g., `run.variant`) as long
 - `rustc` (string; `rustc -V`)
 - `tools` (object; toolchain versions used for the run)
 
-`environment.tools` MUST include:
+If emitting canonical JSON, `environment.tools` MUST include:
 
 - for `tool="callgrind"`:
-  - `iai_callgrind` (string; version, from `Cargo.lock`)
-  - `iai_callgrind_runner` (string; version)
+  - `gungraun` (string; version, from `Cargo.lock`)
+  - `gungraun_runner` (string; version)
   - `valgrind` (string; version)
 - for `tool="criterion"`:
   - `criterion` (string; version, from `Cargo.lock`)
@@ -289,8 +293,8 @@ Example record:
     "runner": "github-actions",
     "rustc": "rustc 1.88.0 (....)",
     "tools": {
-      "iai_callgrind": "0.16.1",
-      "iai_callgrind_runner": "0.16.1",
+      "gungraun": "0.17.0",
+      "gungraun_runner": "0.17.0",
       "valgrind": "3.19.0"
     }
   }
@@ -299,25 +303,14 @@ Example record:
 
 ### Callgrind output (CI)
 
-CI MUST produce canonical JSON for the Guardrail Suite, even if the Callgrind runner emits its own JSON.
+CI SHOULD upload Guardrail results to Bencher and MAY also upload Callgrind artifacts for debugging.
 
-- raw tool output may be uploaded as an artifact for debugging
-- CI SHOULD upload `target/iai/**` as an artifact (Callgrind logs/out/flamegraphs)
-- normalization MUST inject `git_sha`, `timestamp`, and `environment.*` fields
-- gating MUST be based on `Ir` unless this document is updated
+- CI SHOULD upload `target/gungraun/**` as an artifact (Callgrind logs/out/flamegraphs)
+- gating SHOULD be based on `Ir` unless this document is updated
 
 ### Artifacts
 
-Guardrail runs SHOULD also produce a machine-readable `iai-callgrind` summary artifact:
-
-- `target/bench-results/guardrail.<variant>.iai.json` (JSON array; raw per-benchmark summaries)
-
-Canonical records MAY include an `artifacts` object to point to debug files (relative paths):
-
-- `artifacts.iai_summaries_json` (string; points at `target/bench-results/guardrail.<variant>.iai.json`)
-- `artifacts.callgrind.out_paths` (array of strings)
-- `artifacts.callgrind.log_paths` (array of strings)
-- `artifacts.callgrind.flamegraphs` (array of strings)
+Guardrail runs MAY upload raw tool output and Callgrind debug files as artifacts (for debugging).
 
 ## Baselines and thresholds
 

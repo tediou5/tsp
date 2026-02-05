@@ -20,7 +20,7 @@ fuzzing = ["dep:arbitrary"]
 demo = []
 nacl = ["essr"]
 pq = ["dep:hpke_pq", "dep:ml-dsa", "essr"]
-bench-callgrind = ["dep:iai-callgrind"]
+bench-callgrind = ["dep:gungraun"]
 bench-criterion = ["dep:criterion"]
 async = [
   "resolve",
@@ -90,7 +90,7 @@ async-trait = "0.1.88"
 didwebvh-rs = { workspace = true, optional = true }
 
 # bench
-iai-callgrind = { version = "0.16.1", optional = true }
+gungraun = { version = "0.17.0", optional = true }
 criterion = { version = "0.5.1", optional = true }
 
 # not used directly, but we need to configure
@@ -125,10 +125,6 @@ required-features = ["resolve", "bench-callgrind"]
 name = "guardrail_pq"
 harness = false
 required-features = ["pq", "resolve", "bench-callgrind"]
-
-[[bench]]
-name = "guardrail_report"
-harness = false
 
 [[bench]]
 name = "throughput"

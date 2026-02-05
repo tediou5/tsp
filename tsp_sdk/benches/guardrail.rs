@@ -1,4 +1,4 @@
-use iai_callgrind::{
+use gungraun::{
     LibraryBenchmarkConfig, OutputFormat, library_benchmark, library_benchmark_group, main,
 };
 #[path = "common/bench.rs"]
