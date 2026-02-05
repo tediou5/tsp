@@ -631,6 +631,7 @@ fn bench_roundtrip(
 
 fn size_label(payload_len: usize) -> &'static str {
     match payload_len {
+        1 => "1B",
         1024 => "1KiB",
         16_384 => "16KiB",
         _ => "custom",
@@ -638,7 +639,7 @@ fn size_label(payload_len: usize) -> &'static str {
 }
 
 fn benches(c: &mut Criterion) {
-    for payload_len in [1024usize, 16 * 1024] {
+    for payload_len in [1usize, 1024usize, 16 * 1024] {
         bench_oneway(c, "tcp", "127.0.0.1", payload_len);
         bench_roundtrip(c, "tcp", "127.0.0.1", payload_len);
 
@@ -647,7 +648,7 @@ fn benches(c: &mut Criterion) {
     }
 
     // QUIC transport currently limits single-message size to 8KiB.
-    for payload_len in [1024usize] {
+    for payload_len in [1usize, 1024usize] {
         bench_oneway(c, "quic", "localhost", payload_len);
         bench_roundtrip(c, "quic", "localhost", payload_len);
     }

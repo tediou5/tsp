@@ -105,6 +105,11 @@ fn sign_verify_mldsa65(case: &SignVerifyCase) -> usize {
 
 #[cfg(all(feature = "pq", not(feature = "nacl")))]
 fn benches(c: &mut Criterion) {
+    c.bench_function("throughput.crypto.seal_open.hpke_pq.direct.0B", |b| {
+        let case = setup_seal_open("throughput.crypto.seal_open.hpke_pq.direct.0B", 0);
+        b.iter(|| seal_open_hpke_pq(&case));
+    });
+
     c.bench_function("throughput.crypto.seal_open.hpke_pq.direct.1KiB", |b| {
         let case = setup_seal_open("throughput.crypto.seal_open.hpke_pq.direct.1KiB", 1024);
         b.iter(|| seal_open_hpke_pq(&case));
@@ -116,6 +121,11 @@ fn benches(c: &mut Criterion) {
             16 * 1024,
         );
         b.iter(|| seal_open_hpke_pq(&case));
+    });
+
+    c.bench_function("throughput.crypto.sign_verify.mldsa65.direct.0B", |b| {
+        let case = setup_sign_verify("throughput.crypto.sign_verify.mldsa65.direct.0B", 0);
+        b.iter(|| sign_verify_mldsa65(&case));
     });
 
     c.bench_function("throughput.crypto.sign_verify.mldsa65.direct.1KiB", |b| {

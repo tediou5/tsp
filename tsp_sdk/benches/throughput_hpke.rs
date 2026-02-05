@@ -106,6 +106,11 @@ fn sign_verify_ed25519(case: &SignVerifyCase) -> usize {
 
 #[cfg(all(not(feature = "nacl"), not(feature = "pq")))]
 fn benches(c: &mut Criterion) {
+    c.bench_function("throughput.crypto.seal_open.hpke.direct.0B", |b| {
+        let case = setup_seal_open("throughput.crypto.seal_open.hpke.direct.0B", 0);
+        b.iter(|| seal_open_hpke(&case));
+    });
+
     c.bench_function("throughput.crypto.seal_open.hpke.direct.1KiB", |b| {
         let case = setup_seal_open("throughput.crypto.seal_open.hpke.direct.1KiB", 1024);
         b.iter(|| seal_open_hpke(&case));
@@ -114,6 +119,11 @@ fn benches(c: &mut Criterion) {
     c.bench_function("throughput.crypto.seal_open.hpke.direct.16KiB", |b| {
         let case = setup_seal_open("throughput.crypto.seal_open.hpke.direct.16KiB", 16 * 1024);
         b.iter(|| seal_open_hpke(&case));
+    });
+
+    c.bench_function("throughput.crypto.sign_verify.ed25519.direct.0B", |b| {
+        let case = setup_sign_verify("throughput.crypto.sign_verify.ed25519.direct.0B", 0);
+        b.iter(|| sign_verify_ed25519(&case));
     });
 
     c.bench_function("throughput.crypto.sign_verify.ed25519.direct.1KiB", |b| {

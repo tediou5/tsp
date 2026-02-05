@@ -49,6 +49,10 @@ fn setup_seal_open(_benchmark_id: &'static str, payload_len: usize) -> SealOpenC
 
 #[cfg(all(feature = "pq", not(feature = "nacl")))]
 #[library_benchmark]
+#[bench::direct_0b(
+    args = ("guardrail.crypto.seal_open.hpke_pq.direct.0B", 0),
+    setup = setup_seal_open
+)]
 #[bench::direct_1kib(
     args = ("guardrail.crypto.seal_open.hpke_pq.direct.1KiB", 1024),
     setup = setup_seal_open
@@ -96,6 +100,10 @@ fn setup_sign_verify(_benchmark_id: &'static str, payload_len: usize) -> SignVer
 
 #[cfg(all(feature = "pq", not(feature = "nacl")))]
 #[library_benchmark]
+#[bench::direct_0b(
+    args = ("guardrail.crypto.sign_verify.mldsa65.direct.0B", 0),
+    setup = setup_sign_verify
+)]
 #[bench::direct_1kib(
     args = ("guardrail.crypto.sign_verify.mldsa65.direct.1KiB", 1024),
     setup = setup_sign_verify
