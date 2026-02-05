@@ -368,6 +368,7 @@ fn bench_relationship_roundtrip(c: &mut Criterion, backend: &'static str) {
 
 fn size_label(payload_len: usize) -> &'static str {
     match payload_len {
+        0 => "0B",
         1024 => "1KiB",
         16_384 => "16KiB",
         _ => "custom",
@@ -375,7 +376,7 @@ fn size_label(payload_len: usize) -> &'static str {
 }
 
 fn benches(c: &mut Criterion) {
-    for payload_len in [1024usize, 16 * 1024] {
+    for payload_len in [0usize, 1024usize, 16 * 1024] {
         bench_send_receive_direct(c, "mem", payload_len);
         bench_send_receive_direct(c, "sqlite", payload_len);
     }

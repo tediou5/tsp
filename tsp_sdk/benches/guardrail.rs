@@ -6,6 +6,10 @@ mod bench_common;
 mod bench_utils;
 
 #[library_benchmark]
+#[bench::direct_0b(
+    args = ("guardrail.store.seal_open.direct.0B", 0),
+    setup = bench_common::setup_store
+)]
 #[bench::direct_1kib(
     args = ("guardrail.store.seal_open.direct.1KiB", 1024),
     setup = bench_common::setup_store
@@ -19,6 +23,10 @@ fn guardrail_store_seal_open(case: bench_common::StoreCase) -> usize {
 }
 
 #[library_benchmark]
+#[bench::direct_0b(
+    args = ("guardrail.crypto.seal_open.direct.0B", 0),
+    setup = bench_common::setup_crypto
+)]
 #[bench::direct_1kib(
     args = ("guardrail.crypto.seal_open.direct.1KiB", 1024),
     setup = bench_common::setup_crypto
@@ -32,6 +40,7 @@ fn guardrail_crypto_seal_open(case: bench_common::CryptoCase) -> usize {
 }
 
 #[library_benchmark]
+#[bench::b0b(args = ("guardrail.crypto.digest.sha256.0B", 0), setup = bench_common::setup_digest_input)]
 #[bench::b32b(args = ("guardrail.crypto.digest.sha256.32B", 32), setup = bench_common::setup_digest_input)]
 #[bench::b1kib(args = ("guardrail.crypto.digest.sha256.1KiB", 1024), setup = bench_common::setup_digest_input)]
 #[bench::b16kib(
@@ -43,6 +52,10 @@ fn guardrail_crypto_sha256(input: Vec<u8>) -> u8 {
 }
 
 #[library_benchmark]
+#[bench::b0b(
+    args = ("guardrail.crypto.digest.blake2b256.0B", 0),
+    setup = bench_common::setup_digest_input
+)]
 #[bench::b32b(
     args = ("guardrail.crypto.digest.blake2b256.32B", 32),
     setup = bench_common::setup_digest_input
@@ -60,6 +73,10 @@ fn guardrail_crypto_blake2b256(input: Vec<u8>) -> u8 {
 }
 
 #[library_benchmark]
+#[bench::b0b(
+    args = ("guardrail.cesr.decode_envelope.0B", 0),
+    setup = bench_common::setup_cesr_fixture
+)]
 #[bench::b1kib(
     args = ("guardrail.cesr.decode_envelope.1KiB", 1024),
     setup = bench_common::setup_cesr_fixture

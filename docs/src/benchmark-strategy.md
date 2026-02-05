@@ -33,29 +33,38 @@ Implementation note: Guardrail coverage MAY require multiple `cargo bench` invoc
 Required benchmark IDs:
 
 - Store:
+  - `guardrail.store.seal_open.direct.0B`
   - `guardrail.store.seal_open.direct.1KiB`
   - `guardrail.store.seal_open.direct.16KiB`
 - Crypto:
+  - `guardrail.crypto.seal_open.direct.0B`
   - `guardrail.crypto.seal_open.direct.1KiB`
   - `guardrail.crypto.seal_open.direct.16KiB`
   - Classic HPKE (no `nacl`):
+    - `guardrail.crypto.seal_open.hpke.direct.0B`
     - `guardrail.crypto.seal_open.hpke.direct.1KiB`
     - `guardrail.crypto.seal_open.hpke.direct.16KiB`
+    - `guardrail.crypto.sign_verify.ed25519.direct.0B`
     - `guardrail.crypto.sign_verify.ed25519.direct.1KiB`
     - `guardrail.crypto.sign_verify.ed25519.direct.16KiB`
   - Post-quantum (feature `pq`, no `nacl`):
+    - `guardrail.crypto.seal_open.hpke_pq.direct.0B`
     - `guardrail.crypto.seal_open.hpke_pq.direct.1KiB`
     - `guardrail.crypto.seal_open.hpke_pq.direct.16KiB`
+    - `guardrail.crypto.sign_verify.mldsa65.direct.0B`
     - `guardrail.crypto.sign_verify.mldsa65.direct.1KiB`
     - `guardrail.crypto.sign_verify.mldsa65.direct.16KiB`
   - Digest:
+    - `guardrail.crypto.digest.sha256.0B`
     - `guardrail.crypto.digest.sha256.32B`
     - `guardrail.crypto.digest.sha256.1KiB`
     - `guardrail.crypto.digest.sha256.16KiB`
+    - `guardrail.crypto.digest.blake2b256.0B`
     - `guardrail.crypto.digest.blake2b256.32B`
     - `guardrail.crypto.digest.blake2b256.1KiB`
     - `guardrail.crypto.digest.blake2b256.16KiB`
 - CESR:
+  - `guardrail.cesr.decode_envelope.0B`
   - `guardrail.cesr.decode_envelope.1KiB`
   - `guardrail.cesr.decode_envelope.16KiB`
   - Input MUST be a fixed, pre-generated message fixture (not generated inside the measured region).
@@ -72,29 +81,38 @@ Purpose: provide machine-specific throughput numbers (TPS) without slowing PR CI
 Required benchmark IDs (mirror the Guardrail Suite under the `throughput.*` suite prefix):
 
 - Store:
+  - `throughput.store.seal_open.direct.0B`
   - `throughput.store.seal_open.direct.1KiB`
   - `throughput.store.seal_open.direct.16KiB`
 - Crypto:
+  - `throughput.crypto.seal_open.direct.0B`
   - `throughput.crypto.seal_open.direct.1KiB`
   - `throughput.crypto.seal_open.direct.16KiB`
   - Classic HPKE (no `nacl`):
+    - `throughput.crypto.seal_open.hpke.direct.0B`
     - `throughput.crypto.seal_open.hpke.direct.1KiB`
     - `throughput.crypto.seal_open.hpke.direct.16KiB`
+    - `throughput.crypto.sign_verify.ed25519.direct.0B`
     - `throughput.crypto.sign_verify.ed25519.direct.1KiB`
     - `throughput.crypto.sign_verify.ed25519.direct.16KiB`
   - Post-quantum (feature `pq`, no `nacl`):
+    - `throughput.crypto.seal_open.hpke_pq.direct.0B`
     - `throughput.crypto.seal_open.hpke_pq.direct.1KiB`
     - `throughput.crypto.seal_open.hpke_pq.direct.16KiB`
+    - `throughput.crypto.sign_verify.mldsa65.direct.0B`
     - `throughput.crypto.sign_verify.mldsa65.direct.1KiB`
     - `throughput.crypto.sign_verify.mldsa65.direct.16KiB`
   - Digest:
+    - `throughput.crypto.digest.sha256.0B`
     - `throughput.crypto.digest.sha256.32B`
     - `throughput.crypto.digest.sha256.1KiB`
     - `throughput.crypto.digest.sha256.16KiB`
+    - `throughput.crypto.digest.blake2b256.0B`
     - `throughput.crypto.digest.blake2b256.32B`
     - `throughput.crypto.digest.blake2b256.1KiB`
     - `throughput.crypto.digest.blake2b256.16KiB`
 - CESR:
+  - `throughput.cesr.decode_envelope.0B`
   - `throughput.cesr.decode_envelope.1KiB`
   - `throughput.cesr.decode_envelope.16KiB`
   - Input MUST be a fixed, pre-generated message fixture (not generated inside the measured region).
@@ -108,24 +126,32 @@ Additional required benchmark IDs:
 
 - Transport (local loopback; setup vs steady-state separated by benchmark ID):
   - TCP:
+    - `throughput.transport.tcp.oneway.deliver.1B`
     - `throughput.transport.tcp.oneway.deliver.1KiB`
     - `throughput.transport.tcp.oneway.deliver.16KiB`
+    - `throughput.transport.tcp.roundtrip.echo.1B`
     - `throughput.transport.tcp.roundtrip.echo.1KiB`
     - `throughput.transport.tcp.roundtrip.echo.16KiB`
   - TLS (local dev cert; no public internet):
+    - `throughput.transport.tls.oneway.deliver.1B`
     - `throughput.transport.tls.oneway.deliver.1KiB`
     - `throughput.transport.tls.oneway.deliver.16KiB`
+    - `throughput.transport.tls.roundtrip.echo.1B`
     - `throughput.transport.tls.roundtrip.echo.1KiB`
     - `throughput.transport.tls.roundtrip.echo.16KiB`
   - QUIC (local dev cert; no public internet):
+    - `throughput.transport.quic.oneway.deliver.1B`
     - `throughput.transport.quic.oneway.deliver.1KiB`
+    - `throughput.transport.quic.roundtrip.echo.1B`
     - `throughput.transport.quic.roundtrip.echo.1KiB`
     - QUIC message size limits MAY restrict larger payload variants; if so, keep required sizes small and add larger sizes only when supported.
 
 - CLI-level workflows (in-process; MUST NOT benchmark process startup):
   - Direct send+receive (relationship already established):
+    - `throughput.cli.send_receive.direct.tcp.mem.0B`
     - `throughput.cli.send_receive.direct.tcp.mem.1KiB`
     - `throughput.cli.send_receive.direct.tcp.mem.16KiB`
+    - `throughput.cli.send_receive.direct.tcp.sqlite.0B`
     - `throughput.cli.send_receive.direct.tcp.sqlite.1KiB`
     - `throughput.cli.send_receive.direct.tcp.sqlite.16KiB`
   - Relationship handshake (request -> accept):
@@ -165,6 +191,8 @@ Default payload sizes for message-like benchmarks:
 - 256 B
 - 1 KiB
 - 16 KiB
+
+Transport loopback benchmarks use `1B` as the practical minimum (instead of `0B`) because some transport harnesses do not represent a 0-byte write as a meaningful per-message transfer.
 
 Fixtures and keys:
 
