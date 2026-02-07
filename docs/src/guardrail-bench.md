@@ -12,7 +12,13 @@ The Guardrail Suite is the CI-oriented benchmark suite for `tsp_sdk`. It is desi
 
 CI (recommended):
 
-Guardrail runs are uploaded and compared in Bencher. See `.github/workflows/bench-guardrail.yml` for the exact commands and required secrets/vars.
+Guardrail runs are uploaded and compared in Bencher.
+
+- Baseline tracking (`push` on `main`): `.github/workflows/bench-guardrail.yml`
+- PR tracking (including fork PRs): `.github/workflows/bench-guardrail-pr.yml` (run/upload artifacts) + `.github/workflows/bench-guardrail-pr-track.yml` (upload to Bencher)
+- Required repository variable: `BENCHER_PROJECT`
+- Required repository secret: `BENCHER_API_TOKEN`
+- Optional repository variable: `BENCHER_HOST` (set only for self-hosted Bencher)
 
 Linux (manual, no Bencher):
 
