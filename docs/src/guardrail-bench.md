@@ -18,7 +18,7 @@ Guardrail runs are uploaded and compared in Bencher.
 - PR tracking (including fork PRs): `.github/workflows/bench-guardrail-pr.yml` (run/upload artifacts) + `.github/workflows/bench-guardrail-pr-track.yml` (upload to Bencher)
 - Required repository variable: `BENCHER_PROJECT`
 - Required repository secret: `BENCHER_API_TOKEN`
-- Optional repository variable: `BENCHER_HOST` (set only for self-hosted Bencher)
+- Optional repository variable: `BENCHER_HOST` (set only for self-hosted Bencher; for bencher.dev leave this variable unset)
 
 Linux (manual, no Bencher):
 
