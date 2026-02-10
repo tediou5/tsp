@@ -18,7 +18,6 @@ jobs:
     env:
       BENCHER_PROJECT: ${{ vars.BENCHER_PROJECT }}
       BENCHER_API_TOKEN: ${{ secrets.BENCHER_API_TOKEN }}
-      BENCHER_HOST: ${{ vars.BENCHER_HOST }}
       BENCHER_TESTBED: ubuntu-latest
       BENCH_ARTIFACT_DIR: target/bench-results/guardrail-pr
     steps:
@@ -40,7 +39,10 @@ jobs:
 
       - name: Publish Bencher URL
         run: |
-          BENCHER_PERF_HOST="${BENCHER_HOST:-https://bencher.dev}"
+          BENCHER_PERF_HOST="${{ vars.BENCHER_HOST }}"
+          if [[ -z "${BENCHER_PERF_HOST}" ]]; then
+            BENCHER_PERF_HOST="https://bencher.dev"
+          fi
           BENCHER_PERF_URL="${BENCHER_PERF_HOST%/}/perf/${BENCHER_PROJECT}"
           echo "Bencher performance dashboard: ${BENCHER_PERF_URL}"
           {
@@ -91,20 +93,24 @@ jobs:
           echo "PR_BASE_SHA=${PR_BASE_SHA}" >> "${GITHUB_ENV}"
           echo "PR_HEAD_SHA=${PR_HEAD_SHA}" >> "${GITHUB_ENV}"
           echo "BENCHER_BRANCH=pr-${PR_NUMBER}" >> "${GITHUB_ENV}"
-          BENCHER_PERF_HOST="${BENCHER_HOST:-https://bencher.dev}"
+          BENCHER_PERF_HOST="${{ vars.BENCHER_HOST }}"
+          if [[ -z "${BENCHER_PERF_HOST}" ]]; then
+            BENCHER_PERF_HOST="https://bencher.dev"
+          fi
           echo "BENCHER_PERF_URL=${BENCHER_PERF_HOST%/}/perf/${BENCHER_PROJECT}" >> "${GITHUB_ENV}"
 
       - name: Upload Guardrail suites to Bencher
         run: |
           set -euo pipefail
 
+          BENCHER_HOST_INPUT="${{ vars.BENCHER_HOST }}"
           HOST_FLAGS=()
-          if [[ -n "${BENCHER_HOST}" ]]; then
-            if [[ "${BENCHER_HOST}" == "https://bencher.dev" || "${BENCHER_HOST}" == "http://bencher.dev" ]]; then
+          if [[ -n "${BENCHER_HOST_INPUT}" ]]; then
+            if [[ "${BENCHER_HOST_INPUT}" == "https://bencher.dev" || "${BENCHER_HOST_INPUT}" == "http://bencher.dev" ]]; then
               echo "BENCHER_HOST should not be set to the Bencher Cloud UI URL. Leave it unset for bencher.dev." >&2
               exit 1
             fi
-            HOST_FLAGS+=(--host "${BENCHER_HOST}")
+            HOST_FLAGS+=(--host "${BENCHER_HOST_INPUT}")
           fi
 
           while IFS='|' read -r ci_id _ _ _ output_file; do
