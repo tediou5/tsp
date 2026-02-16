@@ -159,7 +159,7 @@ Additional required benchmark IDs:
   - Relationship handshake (request -> accept):
     - `throughput.cli.relationship.roundtrip.tcp.mem`
     - `throughput.cli.relationship.roundtrip.tcp.sqlite`
-  - Implementation note (stability): CLI `*.tcp.*` benchmarks SHOULD reuse a persistent loopback TCP connection with explicit message framing (e.g. length-delimited) and MUST NOT open a new TCP connection per message. This is a bench harness detail (the SDK's `tcp` transport may use 1-connection-per-message). These IDs are intended to measure steady-state throughput (seal/open + TCP I/O), not connect/accept setup costs.
+  - Implementation note (stability): CLI `*.tcp.*` benchmarks SHOULD follow the SDK's transport behavior (short-lived sends; no bench-only persistent connection layer). Bench loops SHOULD handle transient transport errors (e.g., local resource pressure) without panicking so long-running runs can complete and expose issues.
 
 - Store backends (persistence layer; local-only):
   - Askar SQLite:

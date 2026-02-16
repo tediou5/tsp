@@ -1,11 +1,7 @@
 use std::time::Instant;
 
-use bytes::Bytes;
 use criterion::{Criterion, criterion_group, criterion_main};
-use futures::{SinkExt as _, StreamExt as _};
-use tokio::net::TcpListener;
-use tokio::sync::Semaphore;
-use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
+use futures::StreamExt as _;
 use url::Url;
 
 use tsp_sdk::{
@@ -15,29 +11,46 @@ use tsp_sdk::{
 #[path = "common/criterion.rs"]
 mod bench_criterion;
 mod bench_utils;
+#[path = "common/failure.rs"]
+mod failure_common;
 #[path = "common/sqlite.rs"]
 mod sqlite;
 #[path = "common/tokio_rt.rs"]
 mod tokio_rt;
 
+fn merge_sample_counts(
+    total_attempts: &std::cell::Cell<u64>,
+    total_failures: &std::cell::Cell<u64>,
+    sample_attempts: u64,
+    sample_failures: u64,
+) {
+    total_attempts.set(total_attempts.get().saturating_add(sample_attempts));
+    total_failures.set(total_failures.get().saturating_add(sample_failures));
+}
+
+fn flush_failure_summary(
+    benchmark_id: &str,
+    total_attempts: &std::cell::Cell<u64>,
+    total_failures: &std::cell::Cell<u64>,
+) {
+    let attempts = total_attempts.get();
+    let failures = total_failures.get();
+    failure_common::write_failure_summary(benchmark_id, failures, attempts)
+        .expect("failed to write failure summary");
+    if failures > 0 {
+        println!("bench={benchmark_id} failures={failures}/{attempts}");
+    }
+}
+
+fn pick_unused_tcp_port() -> u16 {
+    std::net::TcpListener::bind(("127.0.0.1", 0))
+        .and_then(|listener| listener.local_addr())
+        .map(|addr| addr.port())
+        .expect("failed to pick an unused tcp port")
+}
+
 fn tcp_url(host: &str, port: u16) -> Url {
     Url::parse(&format!("tcp://{host}:{port}")).expect("failed to parse tcp url")
-}
-
-fn length_delimited_codec() -> LengthDelimitedCodec {
-    LengthDelimitedCodec::builder()
-        .max_frame_length(2 * 1024 * 1024)
-        .new_codec()
-}
-
-async fn bind_loopback_tcp() -> (TcpListener, Url) {
-    let listener = TcpListener::bind(("127.0.0.1", 0))
-        .await
-        .expect("failed to bind loopback tcp listener");
-    let addr = listener
-        .local_addr()
-        .expect("failed to read listener local addr");
-    (listener, tcp_url("127.0.0.1", addr.port()))
 }
 
 fn fixture_owned_vid_with_transport(which: &str, transport: &Url) -> OwnedVid {
@@ -66,13 +79,13 @@ fn bench_send_receive_direct(c: &mut Criterion, backend: &'static str, payload_l
 
     c.bench_function(&id, |b| {
         let runtime = tokio_rt::current_thread();
+        let total_attempts = std::cell::Cell::new(0u64);
+        let total_failures = std::cell::Cell::new(0u64);
 
         b.iter_custom(|iters| {
             runtime.block_on(async {
-                // Only Bob needs to accept inbound TCP for this scenario.
-                // Alice's transport is a metadata field; it is not dialed during this benchmark.
-                let alice_transport = tcp_url("127.0.0.1", 18_080);
-                let (bob_listener, bob_transport) = bind_loopback_tcp().await;
+                let alice_transport = tcp_url("127.0.0.1", pick_unused_tcp_port());
+                let bob_transport = tcp_url("127.0.0.1", pick_unused_tcp_port());
 
                 let alice_vid = fixture_owned_vid_with_transport("alice", &alice_transport);
                 let bob_vid = fixture_owned_vid_with_transport("bob", &bob_transport);
@@ -86,8 +99,6 @@ fn bench_send_receive_direct(c: &mut Criterion, backend: &'static str, payload_l
                 alice.add_private_vid(alice_vid, None).unwrap();
                 bob.add_private_vid(bob_vid, None).unwrap();
 
-                // Add the peer VIDs (offline; no network).
-                // Using OwnedVid as VerifiedVid is fine here: it is stored as VerifiedVid only.
                 alice
                     .add_verified_vid(
                         fixture_owned_vid_with_transport("bob", &bob_transport),
@@ -100,7 +111,6 @@ fn bench_send_receive_direct(c: &mut Criterion, backend: &'static str, payload_l
                 )
                 .unwrap();
 
-                // Force an established relationship to avoid measuring handshake noise.
                 alice
                     .set_relation_and_status_for_vid(&bob_id, relationship_bi_default(), &alice_id)
                     .unwrap();
@@ -126,80 +136,80 @@ fn bench_send_receive_direct(c: &mut Criterion, backend: &'static str, payload_l
                     (None, None)
                 };
 
-                let ack_sem = std::sync::Arc::new(Semaphore::new(0));
-                let bob_for_server = bob.clone();
-                let bob_id_for_server = bob_id.clone();
-                let ack_sem_for_server = ack_sem.clone();
-                let server = tokio::spawn(async move {
-                    let (stream, _) = bob_listener.accept().await.expect("accept failed");
-                    let mut framed = FramedRead::new(stream, length_delimited_codec());
-                    while let Some(frame) = framed.next().await {
-                        let bytes = frame.expect("tcp read failed");
-                        let mut message = bytes.to_vec();
-                        let received = bob_for_server
-                            .open_message(&mut message)
-                            .expect("open_message failed");
-                        match received {
-                            tsp_sdk::ReceivedTspMessage::GenericMessage {
-                                receiver,
-                                message,
-                                ..
-                            } => {
-                                debug_assert_eq!(
-                                    receiver.as_deref(),
-                                    Some(bob_id_for_server.as_str())
-                                );
-                                std::hint::black_box(message.len());
-                            }
-                            other => panic!("unexpected message kind: {other:?}"),
-                        }
-                        ack_sem_for_server.add_permits(1);
-                    }
-                });
-
-                let client = tokio::net::TcpStream::connect((
-                    "127.0.0.1",
-                    bob_transport.port().expect("tcp url must have port"),
-                ))
-                .await
-                .expect("connect failed");
-                let mut framed_out = FramedWrite::new(client, length_delimited_codec());
+                let mut bob_incoming = tsp_sdk::transport::receive_messages(&bob_transport)
+                    .await
+                    .expect("bob receive_messages failed");
 
                 let start = Instant::now();
+                let mut sample_attempts = 0u64;
+                let mut sample_failures = 0u64;
                 for _ in 0..iters {
+                    sample_attempts += 1;
                     let (_endpoint, message) = alice
                         .seal_message(&alice_id, &bob_id, None, payload.as_slice())
                         .unwrap();
-                    framed_out
-                        .send(Bytes::from(message))
-                        .await
-                        .expect("tcp send failed");
-                    ack_sem
-                        .acquire()
-                        .await
-                        .expect("ack semaphore acquire failed")
-                        .forget();
+
+                    if let Err(error) =
+                        tsp_sdk::transport::send_message(&bob_transport, &message).await
+                    {
+                        sample_failures += 1;
+                        std::hint::black_box(error);
+                        continue;
+                    }
+
+                    let Some(sealed) = bob_incoming.next().await else {
+                        sample_failures += 1;
+                        std::hint::black_box("missing direct recv item");
+                        break;
+                    };
+                    let Ok(sealed) = sealed else {
+                        sample_failures += 1;
+                        std::hint::black_box(sealed.err());
+                        continue;
+                    };
+                    let mut sealed = sealed.to_vec();
+
+                    let Ok(received) = bob.open_message(&mut sealed) else {
+                        sample_failures += 1;
+                        std::hint::black_box("open direct message failed");
+                        continue;
+                    };
+                    let tsp_sdk::ReceivedTspMessage::GenericMessage {
+                        receiver, message, ..
+                    } = received
+                    else {
+                        sample_failures += 1;
+                        std::hint::black_box(received);
+                        continue;
+                    };
+                    debug_assert_eq!(receiver.as_deref(), Some(bob_id.as_str()));
+                    std::hint::black_box(message.len());
 
                     if let (Some(vault_alice), Some(vault_bob)) = (&vault_alice, &vault_bob) {
                         vault_alice.persist(alice.export().unwrap()).await.unwrap();
                         vault_bob.persist(bob.export().unwrap()).await.unwrap();
                     }
                 }
+                merge_sample_counts(
+                    &total_attempts,
+                    &total_failures,
+                    sample_attempts,
+                    sample_failures,
+                );
                 let elapsed = start.elapsed();
 
                 if let Some(vault_alice) = vault_alice {
-                    vault_alice.destroy().await.unwrap();
+                    let _ = vault_alice.destroy().await;
                 }
                 if let Some(vault_bob) = vault_bob {
-                    vault_bob.destroy().await.unwrap();
+                    let _ = vault_bob.destroy().await;
                 }
-
-                drop(framed_out);
-                server.await.expect("server task failed");
 
                 elapsed
             })
         });
+
+        flush_failure_summary(&id, &total_attempts, &total_failures);
     });
 }
 
@@ -207,11 +217,13 @@ fn bench_relationship_roundtrip(c: &mut Criterion, backend: &'static str) {
     let id = format!("throughput.cli.relationship.roundtrip.tcp.{backend}");
     c.bench_function(&id, |b| {
         let runtime = tokio_rt::current_thread();
+        let total_attempts = std::cell::Cell::new(0u64);
+        let total_failures = std::cell::Cell::new(0u64);
 
         b.iter_custom(|iters| {
             runtime.block_on(async {
-                let (alice_listener, alice_transport) = bind_loopback_tcp().await;
-                let (bob_listener, bob_transport) = bind_loopback_tcp().await;
+                let alice_transport = tcp_url("127.0.0.1", pick_unused_tcp_port());
+                let bob_transport = tcp_url("127.0.0.1", pick_unused_tcp_port());
 
                 let alice_vid = fixture_owned_vid_with_transport("alice", &alice_transport);
                 let bob_vid = fixture_owned_vid_with_transport("bob", &bob_transport);
@@ -249,120 +261,117 @@ fn bench_relationship_roundtrip(c: &mut Criterion, backend: &'static str) {
                     (None, None)
                 };
 
-                let (req_tx, mut req_rx) =
-                    tokio::sync::mpsc::channel::<tsp_sdk::definitions::Digest>(1);
-                let bob_for_server = bob.clone();
-                let bob_id_for_server = bob_id.clone();
-                let bob_server = tokio::spawn(async move {
-                    let (stream, _) = bob_listener.accept().await.expect("accept failed");
-                    let mut framed = FramedRead::new(stream, length_delimited_codec());
-                    while let Some(frame) = framed.next().await {
-                        let bytes = frame.expect("tcp read failed");
-                        let mut message = bytes.to_vec();
-                        let received = bob_for_server
-                            .open_message(&mut message)
-                            .expect("open_message failed");
-                        match received {
-                            tsp_sdk::ReceivedTspMessage::RequestRelationship {
-                                receiver,
-                                thread_id,
-                                ..
-                            } => {
-                                debug_assert_eq!(receiver, bob_id_for_server);
-                                let _ = req_tx.send(thread_id).await;
-                            }
-                            other => panic!("unexpected message kind: {other:?}"),
-                        }
-                    }
-                });
-
-                let accept_sem = std::sync::Arc::new(Semaphore::new(0));
-                let alice_for_server = alice.clone();
-                let alice_id_for_server = alice_id.clone();
-                let accept_sem_for_server = accept_sem.clone();
-                let alice_server = tokio::spawn(async move {
-                    let (stream, _) = alice_listener.accept().await.expect("accept failed");
-                    let mut framed = FramedRead::new(stream, length_delimited_codec());
-                    while let Some(frame) = framed.next().await {
-                        let bytes = frame.expect("tcp read failed");
-                        let mut message = bytes.to_vec();
-                        let received = alice_for_server
-                            .open_message(&mut message)
-                            .expect("open_message failed");
-                        match received {
-                            tsp_sdk::ReceivedTspMessage::AcceptRelationship {
-                                receiver, ..
-                            } => {
-                                debug_assert_eq!(receiver, alice_id_for_server);
-                                accept_sem_for_server.add_permits(1);
-                            }
-                            other => panic!("unexpected message kind: {other:?}"),
-                        }
-                    }
-                });
-
-                let alice_to_bob = tokio::net::TcpStream::connect((
-                    "127.0.0.1",
-                    bob_transport.port().expect("tcp url must have port"),
-                ))
-                .await
-                .expect("connect failed");
-                let mut alice_out = FramedWrite::new(alice_to_bob, length_delimited_codec());
-
-                let bob_to_alice = tokio::net::TcpStream::connect((
-                    "127.0.0.1",
-                    alice_transport.port().expect("tcp url must have port"),
-                ))
-                .await
-                .expect("connect failed");
-                let mut bob_out = FramedWrite::new(bob_to_alice, length_delimited_codec());
+                let mut bob_incoming = tsp_sdk::transport::receive_messages(&bob_transport)
+                    .await
+                    .expect("bob receive_messages failed");
+                let mut alice_incoming = tsp_sdk::transport::receive_messages(&alice_transport)
+                    .await
+                    .expect("alice receive_messages failed");
 
                 let start = Instant::now();
+                let mut sample_attempts = 0u64;
+                let mut sample_failures = 0u64;
                 for _ in 0..iters {
-                    let (_endpoint, msg) = alice
+                    sample_attempts += 1;
+                    let (_endpoint, request_msg) = alice
                         .make_relationship_request(&alice_id, &bob_id, None)
                         .unwrap();
-                    alice_out
-                        .send(Bytes::from(msg))
-                        .await
-                        .expect("tcp send failed");
-                    let thread_id = req_rx.recv().await.expect("request missing");
+                    if let Err(error) =
+                        tsp_sdk::transport::send_message(&bob_transport, &request_msg).await
+                    {
+                        sample_failures += 1;
+                        std::hint::black_box(error);
+                        continue;
+                    }
 
-                    let (_endpoint, msg) = bob
+                    let Some(sealed) = bob_incoming.next().await else {
+                        sample_failures += 1;
+                        std::hint::black_box("missing request recv item");
+                        break;
+                    };
+                    let Ok(sealed) = sealed else {
+                        sample_failures += 1;
+                        std::hint::black_box(sealed.err());
+                        continue;
+                    };
+                    let mut sealed = sealed.to_vec();
+                    let Ok(received) = bob.open_message(&mut sealed) else {
+                        sample_failures += 1;
+                        std::hint::black_box("open relationship request failed");
+                        continue;
+                    };
+                    let tsp_sdk::ReceivedTspMessage::RequestRelationship {
+                        receiver,
+                        thread_id,
+                        ..
+                    } = received
+                    else {
+                        sample_failures += 1;
+                        std::hint::black_box(received);
+                        continue;
+                    };
+                    debug_assert_eq!(receiver, bob_id);
+
+                    let (_endpoint, accept_msg) = bob
                         .make_relationship_accept(&bob_id, &alice_id, thread_id, None)
                         .unwrap();
-                    bob_out
-                        .send(Bytes::from(msg))
-                        .await
-                        .expect("tcp send failed");
-                    accept_sem
-                        .acquire()
-                        .await
-                        .expect("accept semaphore acquire failed")
-                        .forget();
+                    if let Err(error) =
+                        tsp_sdk::transport::send_message(&alice_transport, &accept_msg).await
+                    {
+                        sample_failures += 1;
+                        std::hint::black_box(error);
+                        continue;
+                    }
+
+                    let Some(sealed) = alice_incoming.next().await else {
+                        sample_failures += 1;
+                        std::hint::black_box("missing accept recv item");
+                        break;
+                    };
+                    let Ok(sealed) = sealed else {
+                        sample_failures += 1;
+                        std::hint::black_box(sealed.err());
+                        continue;
+                    };
+                    let mut sealed = sealed.to_vec();
+                    let Ok(received) = alice.open_message(&mut sealed) else {
+                        sample_failures += 1;
+                        std::hint::black_box("open relationship accept failed");
+                        continue;
+                    };
+                    let tsp_sdk::ReceivedTspMessage::AcceptRelationship { receiver, .. } = received
+                    else {
+                        sample_failures += 1;
+                        std::hint::black_box(received);
+                        continue;
+                    };
+                    debug_assert_eq!(receiver, alice_id);
 
                     if let (Some(vault_alice), Some(vault_bob)) = (&vault_alice, &vault_bob) {
                         vault_alice.persist(alice.export().unwrap()).await.unwrap();
                         vault_bob.persist(bob.export().unwrap()).await.unwrap();
                     }
                 }
+                merge_sample_counts(
+                    &total_attempts,
+                    &total_failures,
+                    sample_attempts,
+                    sample_failures,
+                );
                 let elapsed = start.elapsed();
 
                 if let Some(vault_alice) = vault_alice {
-                    vault_alice.destroy().await.unwrap();
+                    let _ = vault_alice.destroy().await;
                 }
                 if let Some(vault_bob) = vault_bob {
-                    vault_bob.destroy().await.unwrap();
+                    let _ = vault_bob.destroy().await;
                 }
-
-                drop(alice_out);
-                drop(bob_out);
-                bob_server.await.expect("server task failed");
-                alice_server.await.expect("server task failed");
 
                 elapsed
             })
         });
+
+        flush_failure_summary(&id, &total_attempts, &total_failures);
     });
 }
 

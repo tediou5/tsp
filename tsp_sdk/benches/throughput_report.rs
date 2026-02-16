@@ -7,6 +7,8 @@ use std::{
     process::{Command, Stdio},
 };
 
+#[path = "common/failure.rs"]
+mod failure_common;
 #[path = "common/report.rs"]
 mod report_common;
 use report_common::anyhow;
@@ -32,6 +34,7 @@ fn main() -> anyhow::Result<()> {
     let timestamp = env::var("BENCH_TIMESTAMP").unwrap_or_else(|_| rfc3339_now());
     let tool_versions = tool_versions(&project_root)?;
     let environment = environment(&tool_versions)?;
+    failure_common::clear_failure_summaries(&project_root)?;
 
     for run in throughput_runs() {
         run_criterion(&project_root, &run)?;
@@ -63,6 +66,7 @@ fn main() -> anyhow::Result<()> {
                 size_bytes,
                 median_ns: stats.median_ns,
                 median_ops_per_s,
+                failure_stats: failure_common::read_failure_summary(&project_root, benchmark_id)?,
             });
 
             for (metric, value, unit) in [
@@ -215,6 +219,7 @@ struct SummaryRow {
     size_bytes: Option<u64>,
     median_ns: f64,
     median_ops_per_s: f64,
+    failure_stats: Option<failure_common::FailureStats>,
 }
 
 fn render_summary_markdown(rows: &[SummaryRow], git_sha: &str, timestamp: &str) -> String {
@@ -235,8 +240,8 @@ fn render_summary_markdown(rows: &[SummaryRow], git_sha: &str, timestamp: &str) 
         if current_variant != Some(row.variant) {
             current_variant = Some(row.variant);
             out.push_str(&format!("## variant: {}\n\n", row.variant));
-            out.push_str("| benchmark_id | size_bytes | median_time | ops/s |\n");
-            out.push_str("| --- | ---: | ---: | ---: |\n");
+            out.push_str("| benchmark_id | size_bytes | median_time | ops/s | failures/total |\n");
+            out.push_str("| --- | ---: | ---: | ---: | ---: |\n");
         }
 
         let size = row
@@ -245,9 +250,13 @@ fn render_summary_markdown(rows: &[SummaryRow], git_sha: &str, timestamp: &str) 
             .unwrap_or_else(|| "-".to_string());
         let median = format_duration_ns(row.median_ns);
         let ops = format_ops_per_s(row.median_ops_per_s);
+        let failures = row
+            .failure_stats
+            .map(|stats| format!("{}/{}", stats.failures, stats.total))
+            .unwrap_or_else(|| "-".to_string());
         out.push_str(&format!(
-            "| `{}` | {} | {} | {} |\n",
-            row.benchmark_id, size, median, ops
+            "| `{}` | {} | {} | {} | {} |\n",
+            row.benchmark_id, size, median, ops, failures
         ));
     }
 

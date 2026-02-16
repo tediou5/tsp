@@ -51,7 +51,7 @@ cargo bench -p tsp_sdk --bench throughput_store_backend_pg --features postgres
 
 The suite produces:
 
-- `target/bench-results/throughput.md`: human-readable summary (median time + ops/s).
+- `target/bench-results/throughput.md`: human-readable summary (median time + ops/s + failures/total).
 - `target/bench-results/throughput.jsonl`: canonical JSON Lines (mean in `value`, median under `stats.median.*`).
 - `target/criterion/<benchmark_id>/new/estimates.json`: raw criterion estimates (source of mean/median).
 
@@ -63,9 +63,11 @@ The suite produces:
 - `size_bytes`: parsed from the ID suffix when present (e.g. `1KiB` -> `1024`).
 - `median_time`: per-iteration median wall-clock time (formatted from ns).
 - `ops/s`: `1e9 / median_time_ns` (SI formatting, e.g. `4.12k`).
+- `failures/total`: aggregated runtime failures over total attempts for the benchmark (`x/y`), or `-` when not collected for that benchmark target.
 
 ## Notes
 
 - Criterion may print `Gnuplot not found...`; it does not affect results.
 - Transport benches require `bench-criterion` to use repository-local dev certs for TLS/QUIC.
-- CLI `*.tcp.*` benchmarks use a persistent loopback TCP connection with explicit framing (bench harness detail) to measure steady-state throughput without per-message connect/accept noise.
+- CLI and transport benchmark harnesses follow SDK short-lived send behavior.
+- Bench targets print one `failures/total` summary line per benchmark only when failures are non-zero.
