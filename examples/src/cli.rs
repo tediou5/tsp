@@ -15,6 +15,8 @@ use tsp_sdk::{
 };
 use url::Url;
 
+mod bench;
+
 #[derive(Default, Debug, Clone)]
 enum DidType {
     #[default]
@@ -203,6 +205,14 @@ enum Commands {
     Secret {
         #[clap(subcommand)]
         sub: CustomSecretManagement,
+    },
+    #[command(
+        arg_required_else_help = true,
+        about = "run transport benchmark traffic tests"
+    )]
+    Bench {
+        #[clap(subcommand)]
+        sub: bench::BenchSubcommand,
     },
 }
 
@@ -1041,6 +1051,9 @@ async fn run() -> Result<(), Error> {
                 println!("successfully removed secret '{}'", key);
             }
         },
+        Commands::Bench { sub } => {
+            bench::run(sub, &vid_wallet, &args.wallet).await?;
+        }
     }
 
     write_wallet(&vault, &vid_wallet).await?;
