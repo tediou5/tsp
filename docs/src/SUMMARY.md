@@ -22,6 +22,7 @@
 - [Custom VIDs](custom-vids.md)
 - [Custom secure storage](custom-secure-storage.md)
 - [Benchmark](benchmark.md)
+- [Network Traffic Benchmark](network-traffic-benchmark.md)
 
 # Protocol Integrations
 
