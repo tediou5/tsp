@@ -45,7 +45,13 @@ jobs:
             fi
             cargo_args+=(--features "${features}")
 
-            cargo bench "${cargo_args[@]}" > "${ARTIFACT_DIR}/${output_file}" 2>&1
+            log_file="${ARTIFACT_DIR}/${output_file}"
+            if ! cargo bench "${cargo_args[@]}" > "${log_file}" 2>&1; then
+              echo "::group::${bench_target} failed log"
+              cat "${log_file}"
+              echo "::endgroup::"
+              exit 1
+            fi
           done < <(bash .github/scripts/guardrail-variants.sh)
 
       - name: Persist PR event payload
