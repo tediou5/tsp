@@ -52,6 +52,8 @@ url = { workspace = true }
 rustls = { workspace = true }
 tower-http = { workspace = true }
 uuid = "1.17.0"
+humantime = "2.1.0"
+byte-unit = "5.1.6"
 
 [dev-dependencies]
 assert_cmd = "2.0.17"
