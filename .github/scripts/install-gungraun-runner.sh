@@ -12,4 +12,9 @@ if [[ -z "${version}" ]]; then
   exit 1
 fi
 
-cargo install gungraun-runner --version "${version}"
+install_requirement="${version}"
+if [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.].*)?$ ]]; then
+  install_requirement="^${version}"
+fi
+
+cargo install gungraun-runner --force --version "${install_requirement}"
