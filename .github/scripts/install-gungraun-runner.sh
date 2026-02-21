@@ -12,4 +12,4 @@ if [[ -z "${version}" ]]; then
   exit 1
 fi
 
-cargo install --locked gungraun-runner --version "${version}"
+cargo install gungraun-runner --version "${version}"
