@@ -186,7 +186,7 @@ async fn vid_page(Path(did): Path<String>) -> Response {
 /// Render the VID verification page HTML
 fn render_vid_page(did: &str, vid: &Vid, metadata: Option<&serde_json::Value>) -> String {
     let short_did = if did.len() > 40 {
-        format!("{}...{}", &did[..20], &did[did.len()-12..])
+        format!("{}...{}", &did[..20], &did[did.len() - 12..])
     } else {
         did.to_string()
     };
@@ -206,12 +206,15 @@ fn render_vid_page(did: &str, vid: &Vid, metadata: Option<&serde_json::Value>) -
             .and_then(|m| m.get("version_id"))
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
-        let update_keys = meta.get("update_keys")
+        let update_keys = meta
+            .get("update_keys")
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter()
-                .filter_map(|v| v.as_str())
-                .map(|s| s.to_string())
-                .collect::<Vec<_>>());
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>()
+            });
         (created, updated, version, update_keys)
     } else {
         (None, None, None, None)
@@ -234,7 +237,8 @@ fn render_vid_page(did: &str, vid: &Vid, metadata: Option<&serde_json::Value>) -
         let version_display = version.as_deref().unwrap_or("1");
         let created_display = created.as_deref().unwrap_or("Unknown");
         let updated_display = updated.as_deref().unwrap_or("Unknown");
-        format!(r#"
+        format!(
+            r#"
         <div class="section">
             <div class="section-title">VERIFICATION HISTORY</div>
             <div class="timeline">
@@ -254,7 +258,8 @@ fn render_vid_page(did: &str, vid: &Vid, metadata: Option<&serde_json::Value>) -
                 </div>
             </div>
         </div>
-        "#)
+        "#
+        )
     } else {
         String::new()
     };
@@ -271,17 +276,20 @@ fn render_vid_page(did: &str, vid: &Vid, metadata: Option<&serde_json::Value>) -
                 format!(r#"<div class="key-item"><span class="key-icon">🔑</span><code>{}</code></div>"#, short_key)
             })
             .collect();
-        format!(r#"
+        format!(
+            r#"
         <div class="section">
             <div class="section-title">UPDATE KEYS</div>
             {keys_html}
         </div>
-        "#)
+        "#
+        )
     } else {
         String::new()
     };
 
-    format!(r##"<!DOCTYPE html>
+    format!(
+        r##"<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -532,12 +540,14 @@ fn render_vid_page(did: &str, vid: &Vid, metadata: Option<&serde_json::Value>) -
     </script>
 </body>
 </html>
-"##)
+"##
+    )
 }
 
 /// Render an error page when VID verification fails
 fn render_vid_error_page(did: &str, error: &str) -> String {
-    format!(r##"<!DOCTYPE html>
+    format!(
+        r##"<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -605,7 +615,8 @@ fn render_vid_error_page(did: &str, error: &str) -> String {
     </div>
 </body>
 </html>
-"##)
+"##
+    )
 }
 
 /// Create a new identity (private VID)
