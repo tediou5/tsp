@@ -1258,38 +1258,38 @@ async fn run_client_throughput(
 
         transport::send_message(&transport_url, &message).await?;
 
-        if started_at.elapsed() > warmup {
+        let elapsed = started_at.elapsed();
+        if elapsed > warmup {
             total.record_send(message.len() as u64, seal_us);
             window.record_send(message.len() as u64, seal_us);
-        }
 
-        let elapsed = started_at.elapsed();
-        if elapsed.saturating_sub(last_report_at) >= interval && !window.is_empty() {
-            let window_elapsed = elapsed.saturating_sub(last_report_at);
-            print_throughput_line(0, window_elapsed, &window, &protocol);
-            window.reset();
-            last_report_at = elapsed;
+            let measured_elapsed = elapsed.saturating_sub(warmup);
+            if measured_elapsed.saturating_sub(last_report_at) >= interval && !window.is_empty() {
+                let window_elapsed = measured_elapsed.saturating_sub(last_report_at);
+                print_throughput_line(0, window_elapsed, &window, &protocol);
+                window.reset();
+                last_report_at = measured_elapsed;
+            }
         }
     }
 
-    let total_elapsed = started_at.elapsed();
+    let measured_total_elapsed = started_at.elapsed().saturating_sub(warmup);
     if !window.is_empty() {
-        let window_elapsed = total_elapsed.saturating_sub(last_report_at);
-        print_throughput_line(0, window_elapsed, &window, &protocol);
+        let window_elapsed = measured_total_elapsed.saturating_sub(last_report_at);
+        if !window_elapsed.is_zero() {
+            print_throughput_line(0, window_elapsed, &window, &protocol);
+        }
     }
 
     let seal = summarize(&total.seal_us);
     let open = summarize(&total.open_us);
-    let elapsed = total_elapsed
-        .saturating_sub(warmup)
-        .as_secs_f64()
-        .max(f64::EPSILON);
-    let msg_per_sec = total.messages as f64 / elapsed;
-    let bandwidth_bps = total.transfer_bytes as f64 * 8.0 / elapsed;
+    let measured_elapsed_secs = measured_total_elapsed.as_secs_f64().max(f64::EPSILON);
+    let msg_per_sec = total.messages as f64 / measured_elapsed_secs;
+    let bandwidth_bps = total.transfer_bytes as f64 * 8.0 / measured_elapsed_secs;
 
     println!(
         "[SUM] {:>5.1} sec  {:>6}  {:>12}  {:>8}  {:>10.2}  {:>15}  {:>11.1}  {:>11}",
-        elapsed,
+        measured_elapsed_secs,
         protocol,
         format_bytes(total.transfer_bytes),
         total.messages,
@@ -1418,27 +1418,30 @@ async fn run_client_latency(
         let jitter = previous_rtt.map(|prev| (rtt_us - prev).abs());
         previous_rtt = Some(rtt_us);
 
-        if started_at.elapsed() > warmup {
+        let elapsed = started_at.elapsed();
+        if elapsed > warmup {
             total.record(sent_bytes, seal_us, rtt_us, jitter);
             window.record(sent_bytes, seal_us, rtt_us, jitter);
-        }
 
-        let elapsed = started_at.elapsed();
-        if elapsed.saturating_sub(last_report_at) >= interval && !window.is_empty() {
-            let window_elapsed = elapsed.saturating_sub(last_report_at);
-            print_latency_line(0, window_elapsed, &window, &protocol);
-            window.reset();
-            last_report_at = elapsed;
+            let measured_elapsed = elapsed.saturating_sub(warmup);
+            if measured_elapsed.saturating_sub(last_report_at) >= interval && !window.is_empty() {
+                let window_elapsed = measured_elapsed.saturating_sub(last_report_at);
+                print_latency_line(0, window_elapsed, &window, &protocol);
+                window.reset();
+                last_report_at = measured_elapsed;
+            }
         }
     }
 
     let total_elapsed = started_at.elapsed();
+    let measured_elapsed = total_elapsed.saturating_sub(warmup);
     if !window.is_empty() {
-        let window_elapsed = total_elapsed.saturating_sub(last_report_at);
-        print_latency_line(0, window_elapsed, &window, &protocol);
+        let window_elapsed = measured_elapsed.saturating_sub(last_report_at);
+        if !window_elapsed.is_zero() {
+            print_latency_line(0, window_elapsed, &window, &protocol);
+        }
     }
 
-    let measured_elapsed = total_elapsed.saturating_sub(warmup);
     let elapsed_s = measured_elapsed.as_secs_f64().max(f64::EPSILON);
     let msg_per_sec = total.messages as f64 / elapsed_s;
     let bandwidth_bps = total.transfer_bytes as f64 * 8.0 / elapsed_s;
