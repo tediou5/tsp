@@ -319,8 +319,7 @@ pub(crate) async fn run(
             one_shot,
             json,
         } => {
-            let vid = vid
-                .unwrap_or_else(|| profile.default_server_vid().to_string());
+            let vid = vid.unwrap_or_else(|| profile.default_server_vid().to_string());
             maybe_bootstrap_server_profile_defaults(store, profile, &vid)?;
             let interval = parse_duration_nonzero(&interval, "interval")?;
             run_server(store, &vid, interval, one_shot, json).await
@@ -338,10 +337,9 @@ pub(crate) async fn run(
             ack_timeout,
             json,
         } => {
-            let sender = sender
-                .unwrap_or_else(|| profile.default_client_sender().to_string());
-            let receiver = receiver
-                .unwrap_or_else(|| profile.default_client_receiver().to_string());
+            let sender = sender.unwrap_or_else(|| profile.default_client_sender().to_string());
+            let receiver =
+                receiver.unwrap_or_else(|| profile.default_client_receiver().to_string());
             maybe_bootstrap_client_profile_defaults(store, profile, &sender, &receiver)?;
             let payload_size = parse_payload_size(&payload_size)?;
             let duration = parse_duration_nonzero(&duration, "duration")?;
@@ -596,7 +594,10 @@ fn parse_duration_nonzero(value: &str, field: &str) -> Result<Duration, Error> {
     Ok(duration)
 }
 
-fn resolve_vid_transport(store: &AsyncSecureStore, alias_or_vid: &str) -> Result<(String, Url), Error> {
+fn resolve_vid_transport(
+    store: &AsyncSecureStore,
+    alias_or_vid: &str,
+) -> Result<(String, Url), Error> {
     let vid = store.try_resolve_alias(alias_or_vid)?;
     let (vids, _, _) = store.export()?;
 
@@ -830,12 +831,7 @@ fn print_latency_header() {
     );
 }
 
-fn print_throughput_line(
-    id: u32,
-    interval: Duration,
-    stats: &ThroughputStats,
-    protocol: &str,
-) {
+fn print_throughput_line(id: u32, interval: Duration, stats: &ThroughputStats, protocol: &str) {
     let elapsed = interval.as_secs_f64().max(f64::EPSILON);
     let msg_per_sec = stats.messages as f64 / elapsed;
     let bps = stats.transfer_bytes as f64 * 8.0 / elapsed;
@@ -855,12 +851,7 @@ fn print_throughput_line(
     );
 }
 
-fn print_latency_line(
-    id: u32,
-    interval: Duration,
-    stats: &LatencyStats,
-    protocol: &str,
-) {
+fn print_latency_line(id: u32, interval: Duration, stats: &LatencyStats, protocol: &str) {
     let rtt = summarize_with_stddev(&stats.rtt_us);
     let jitter = summarize_jitter(&stats.jitter_us);
 
@@ -948,7 +939,11 @@ fn should_split_server_session(idle_for: Duration, interval: Duration) -> bool {
     idle_for >= server_idle_gap_threshold(interval)
 }
 
-fn should_emit_server_window(window: &ThroughputStats, window_elapsed: Duration, interval: Duration) -> bool {
+fn should_emit_server_window(
+    window: &ThroughputStats,
+    window_elapsed: Duration,
+    interval: Duration,
+) -> bool {
     !window.is_empty() && window_elapsed >= interval
 }
 
@@ -1501,25 +1496,15 @@ mod tests {
 
     fn store_with_default_client_identities() -> AsyncSecureStore {
         let store = AsyncSecureStore::new();
-        maybe_bootstrap_client_profile_defaults(
-            &store,
-            BenchProfile::LocalTcp,
-            "alice",
-            "bob",
-        )
-        .unwrap();
+        maybe_bootstrap_client_profile_defaults(&store, BenchProfile::LocalTcp, "alice", "bob")
+            .unwrap();
         store
     }
 
     fn store_with_hosted_http_client_identities() -> AsyncSecureStore {
         let store = AsyncSecureStore::new();
-        maybe_bootstrap_client_profile_defaults(
-            &store,
-            BenchProfile::HostedHttp,
-            "a",
-            "b",
-        )
-        .unwrap();
+        maybe_bootstrap_client_profile_defaults(&store, BenchProfile::HostedHttp, "a", "b")
+            .unwrap();
         store
     }
 
@@ -1678,8 +1663,14 @@ mod tests {
     #[test]
     fn server_session_split_uses_idle_gap_threshold() {
         let interval = Duration::from_secs(1);
-        assert!(!should_split_server_session(Duration::from_millis(1999), interval));
-        assert!(should_split_server_session(Duration::from_millis(2000), interval));
+        assert!(!should_split_server_session(
+            Duration::from_millis(1999),
+            interval
+        ));
+        assert!(should_split_server_session(
+            Duration::from_millis(2000),
+            interval
+        ));
     }
 
     #[test]
