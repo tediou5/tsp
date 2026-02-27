@@ -21,6 +21,16 @@ const BUILTIN_ALICE_PIV: &str = include_str!("../test/alice/piv.json");
 const BUILTIN_BOB_PIV: &str = include_str!("../test/bob/piv.json");
 const BUILTIN_A_PIV: &str = include_str!("../test/a/piv.json");
 const BUILTIN_B_PIV: &str = include_str!("../test/b/piv.json");
+const LOCAL_QUIC_SERVER_VID: &str = "quic-bob";
+const LOCAL_QUIC_CLIENT_SENDER: &str = "quic-alice";
+const LOCAL_QUIC_CLIENT_RECEIVER: &str = "quic-bob";
+const BUILTIN_QUIC_ALICE_PIV: &str = include_str!("../test/quic-alice/piv.json");
+const BUILTIN_QUIC_BOB_PIV: &str = include_str!("../test/quic-bob/piv.json");
+const LOCAL_TLS_SERVER_VID: &str = "tls-bob";
+const LOCAL_TLS_CLIENT_SENDER: &str = "tls-alice";
+const LOCAL_TLS_CLIENT_RECEIVER: &str = "tls-bob";
+const BUILTIN_TLS_ALICE_PIV: &str = include_str!("../test/tls-alice/piv.json");
+const BUILTIN_TLS_BOB_PIV: &str = include_str!("../test/tls-bob/piv.json");
 const SERVER_SESSION_IDLE_GAP_MULTIPLIER: u32 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,6 +60,8 @@ impl FrameKind {
 pub(crate) enum BenchProfile {
     LocalTcp,
     HostedHttp,
+    LocalQuic,
+    LocalTls,
 }
 
 impl BenchProfile {
@@ -57,6 +69,8 @@ impl BenchProfile {
         match self {
             Self::LocalTcp => "local-tcp",
             Self::HostedHttp => "hosted-http",
+            Self::LocalQuic => "local-quic",
+            Self::LocalTls => "local-tls",
         }
     }
 
@@ -64,6 +78,8 @@ impl BenchProfile {
         match self {
             Self::LocalTcp => LOCAL_TCP_SERVER_VID,
             Self::HostedHttp => HOSTED_HTTP_SERVER_VID,
+            Self::LocalQuic => LOCAL_QUIC_SERVER_VID,
+            Self::LocalTls => LOCAL_TLS_SERVER_VID,
         }
     }
 
@@ -71,6 +87,8 @@ impl BenchProfile {
         match self {
             Self::LocalTcp => LOCAL_TCP_CLIENT_SENDER,
             Self::HostedHttp => HOSTED_HTTP_CLIENT_SENDER,
+            Self::LocalQuic => LOCAL_QUIC_CLIENT_SENDER,
+            Self::LocalTls => LOCAL_TLS_CLIENT_SENDER,
         }
     }
 
@@ -78,6 +96,8 @@ impl BenchProfile {
         match self {
             Self::LocalTcp => LOCAL_TCP_CLIENT_RECEIVER,
             Self::HostedHttp => HOSTED_HTTP_CLIENT_RECEIVER,
+            Self::LocalQuic => LOCAL_QUIC_CLIENT_RECEIVER,
+            Self::LocalTls => LOCAL_TLS_CLIENT_RECEIVER,
         }
     }
 
@@ -85,6 +105,8 @@ impl BenchProfile {
         match self {
             Self::LocalTcp => BUILTIN_ALICE_PIV,
             Self::HostedHttp => BUILTIN_A_PIV,
+            Self::LocalQuic => BUILTIN_QUIC_ALICE_PIV,
+            Self::LocalTls => BUILTIN_TLS_ALICE_PIV,
         }
     }
 
@@ -92,6 +114,8 @@ impl BenchProfile {
         match self {
             Self::LocalTcp => BUILTIN_BOB_PIV,
             Self::HostedHttp => BUILTIN_B_PIV,
+            Self::LocalQuic => BUILTIN_QUIC_BOB_PIV,
+            Self::LocalTls => BUILTIN_TLS_BOB_PIV,
         }
     }
 }
@@ -109,7 +133,7 @@ pub(crate) enum BenchSubcommand {
         #[arg(
             long,
             default_value_t = BenchProfile::LocalTcp,
-            help = "Built-in profile: local-tcp (alice/bob) or hosted-http (a/b)"
+            help = "Built-in profile: local-tcp, local-tls, local-quic, or hosted-http"
         )]
         profile: BenchProfile,
         #[arg(long, help = "Receiver VID or alias (default depends on --profile)")]
@@ -126,7 +150,7 @@ pub(crate) enum BenchSubcommand {
         #[arg(
             long,
             default_value_t = BenchProfile::LocalTcp,
-            help = "Built-in profile: local-tcp (alice/bob) or hosted-http (a/b)"
+            help = "Built-in profile: local-tcp, local-tls, local-quic, or hosted-http"
         )]
         profile: BenchProfile,
         #[arg(long, help = "Sender VID or alias (default depends on --profile)")]
