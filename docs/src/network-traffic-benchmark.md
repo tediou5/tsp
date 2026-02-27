@@ -45,18 +45,7 @@ tsp --wallet bench-http-a bench client \
   --duration 30s
 ```
 
-## Output and metrics
-
-Throughput output:
-
-```text
-Session 1 started (TCP)
-[ ID]     Interval  Proto     Transfer  Messages      Msg/s        Bandwidth  Seal_us(p50)  Open_us(p50)
-[  0]      1.0 sec    TCP      1.2 MiB       120     120.00    10.20 Mbits/s         650.3         710.1
-...
-Session 1 summary:
-[SUM]  30.0 sec    TCP      36.1 MiB      3600     120.00    10.08 Mbits/s         642.0         705.8
-```
+## Metrics
 
 Latency mode:
 
