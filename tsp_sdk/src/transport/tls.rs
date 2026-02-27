@@ -113,7 +113,7 @@ async fn get_or_create_connection(url: &Url) -> Result<(), TransportError> {
     let key = url.to_string();
     let mut cache = TLS_CONNECTIONS.lock().await;
 
-    if !cache.contains_key(&key) {
+    if let std::collections::hash_map::Entry::Vacant(entry) = cache.entry(key) {
         let addresses = url
             .socket_addrs(|| None)
             .map_err(|_| TransportError::InvalidTransportAddress(url.to_string()))?;
@@ -147,7 +147,7 @@ async fn get_or_create_connection(url: &Url) -> Result<(), TransportError> {
             .map_err(|e| TransportError::Connection(address.to_string(), e))?;
 
         let framed = Framed::new(tls_stream, LengthDelimitedCodec::new());
-        cache.insert(key, framed);
+        entry.insert(framed);
     }
 
     Ok(())
@@ -170,14 +170,13 @@ pub(crate) async fn send_message(tsp_message: &[u8], url: &Url) -> Result<(), Tr
     {
         get_or_create_connection(url).await?;
         let mut cache = TLS_CONNECTIONS.lock().await;
-        if let Some(framed) = cache.get_mut(&key) {
-            if framed
+        if let Some(framed) = cache.get_mut(&key)
+            && framed
                 .send(Bytes::copy_from_slice(tsp_message))
                 .await
                 .is_ok()
-            {
-                return Ok(());
-            }
+        {
+            return Ok(());
         }
     }
 
@@ -190,7 +189,7 @@ pub(crate) async fn send_message(tsp_message: &[u8], url: &Url) -> Result<(), Tr
         framed
             .send(Bytes::copy_from_slice(tsp_message))
             .await
-            .map_err(|e| TransportError::Connection(key, e.into()))?;
+            .map_err(|e| TransportError::Connection(key, e))?;
     }
 
     Ok(())
@@ -240,7 +239,7 @@ pub(crate) async fn receive_messages(
                 while let Some(result) = framed.next().await {
                     let message = result
                         .map(|b| b.to_vec())
-                        .map_err(|e| TransportError::Connection(peer_addr.to_string(), e.into()));
+                        .map_err(|e| TransportError::Connection(peer_addr.to_string(), e));
 
                     if tx.send(message).await.is_err() {
                         break;
