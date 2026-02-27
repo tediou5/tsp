@@ -74,6 +74,22 @@ pub(super) fn create_tls_config() -> ClientConfig {
         }
     }
 
+    // Add custom CA certificate from TSP_TLS_CA environment variable (if set)
+    #[cfg(not(test))]
+    if let Ok(ca_path) = std::env::var("TSP_TLS_CA") {
+        let certs: Vec<rustls_pki_types::CertificateDer<'static>> =
+            rustls_pki_types::CertificateDer::pem_file_iter(&ca_path)
+                .unwrap_or_else(|_| panic!("could not find CA certificate at {ca_path}"))
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap_or_else(|_| panic!("could not read CA certificate at {ca_path}"));
+
+        for cert in certs {
+            root_cert_store
+                .add(cert)
+                .expect("could not add custom CA certificate");
+        }
+    }
+
     rustls::ClientConfig::builder_with_provider(CRYPTO_PROVIDER.clone())
         .with_safe_default_protocol_versions()
         .unwrap()
