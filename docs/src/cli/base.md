@@ -197,6 +197,26 @@ The TSP CLI can use two types of transport:
 
 The TSP SDK also provides a couple more transport types and provides methods to use custom transport solutions (see [transport layers](../transport.md)), although these are not available through the CLI.
 
+### Transport benchmark traffic (`bench`)
+
+The CLI includes an `iperf`-like benchmark mode for sustained traffic tests.
+
+Quick start:
+
+```sh
+tsp --wallet bob bench server
+```
+
+```sh
+tsp --wallet alice bench client \
+  --profile local-tcp \
+  --payload-size 1KiB \
+  --duration 30s
+```
+
+For profiles, HTTP baseline commands, latency mode, and output details, see
+[Network Traffic Benchmark](../network-traffic-benchmark.md).
+
 ### Pretty print messages
 
 The CLI has a `--verbose` flag.
